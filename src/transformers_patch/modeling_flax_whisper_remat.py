@@ -31,19 +31,32 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
 from transformers.generation.flax_logits_process import (
-    FlaxForcedBOSTokenLogitsProcessor, FlaxForcedEOSTokenLogitsProcessor,
-    FlaxLogitsProcessor, FlaxLogitsProcessorList, FlaxMinLengthLogitsProcessor)
+    FlaxForcedBOSTokenLogitsProcessor,
+    FlaxForcedEOSTokenLogitsProcessor,
+    FlaxLogitsProcessor,
+    FlaxLogitsProcessorList,
+    FlaxMinLengthLogitsProcessor,
+)
 from transformers.modeling_flax_outputs import (
-    FlaxBaseModelOutput, FlaxBaseModelOutputWithPastAndCrossAttentions,
-    FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput,
-    FlaxSeq2SeqModelOutput)
-from transformers.modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
-                                              append_call_sample_docstring,
-                                              append_replace_return_docstrings,
-                                              overwrite_call_docstring)
-from transformers.utils import (add_start_docstrings,
-                                add_start_docstrings_to_model_forward, logging,
-                                replace_return_docstrings)
+    FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSeq2SeqLMOutput,
+    FlaxSeq2SeqModelOutput,
+)
+from transformers.modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
+)
+from transformers.utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 
 from src.transformers_patch.whisper_config_remat import WhisperConfig
 
@@ -58,8 +71,7 @@ from pickle import UnpicklingError
 import msgpack.exceptions
 from flax.serialization import from_bytes
 from transformers import PretrainedConfig
-from transformers.utils import (cached_file, download_url, has_file,
-                                is_remote_url)
+from transformers.utils import cached_file, download_url, has_file, is_remote_url
 from transformers.utils.hub import get_checkpoint_shard_files
 
 logger = logging.get_logger(__name__)

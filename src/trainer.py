@@ -14,13 +14,76 @@ from jax.experimental.pjit import PartitionSpec
 import utils
 
 
-def loss_fn(logits, labels, mask):
-    shift_logits = logits[:, -1 - labels.shape[-1] : -1]
-    loss = optax.softmax_cross_entropy_with_integer_labels(
-        shift_logits,
-        labels,
+def encoder_decoder_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
+    model_outputs = apply_fn(
+        batch.input_ids,
+        attention_mask=batch.attention_mask,
+        position_ids=batch.position_ids,
+        decoder_input_ids=batch.decoder_input_ids,
+        decoder_attention_mask=batch.decoder_attention_mask,
+        decoder_position_ids=batch.decoder_position_ids,
+        params=params,
+        train=use_dropout,
+        dropout_rng=dropout_rng if use_dropout else None,
     )
-    return loss.mean(where=mask)
+    per_token_loss = (
+        optax.softmax_cross_entropy_with_integer_labels(
+            model_outputs.logits[:, :-1], batch.decoder_input_ids[:, 1:]
+        )
+        * batch.decoder_attention_mask[:, 1:]
+    )
+    loss = per_token_loss.sum() / batch.decoder_attention_mask[:, 1:].sum()
+
+    return loss
+
+
+def decoder_only_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
+    if hasattr(batch, "decoder_input_ids"):
+        input_ids = jnp.concatenate(
+            (batch.input_ids, batch.decoder_input_ids),
+            axis=1,
+        )
+        attention_mask = jnp.concatenate(
+            (batch.attention_mask, batch.decoder_attention_mask),
+            axis=1,
+        )
+        position_ids = jnp.maximum(jnp.cumsum(attention_mask, axis=1) - 1, 0).astype(
+            jnp.int32
+        )
+        model_outputs = apply_fn(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            params=params,
+            train=use_dropout,
+            dropout_rng=dropout_rng if use_dropout else None,
+        )
+        per_token_loss = (
+            optax.softmax_cross_entropy_with_integer_labels(
+                model_outputs.logits[:, (batch.input_ids.shape[1] - 1) : -1, :],
+                batch.decoder_input_ids,
+            )
+            * batch.decoder_attention_mask
+        )
+        loss = per_token_loss.sum() / batch.decoder_attention_mask.sum()
+    else:
+        model_outputs = apply_fn(
+            batch.input_ids,
+            attention_mask=batch.attention_mask,
+            position_ids=batch.position_ids,
+            params=params,
+            train=use_dropout,
+            dropout_rng=dropout_rng if use_dropout else None,
+        )
+        per_token_loss = (
+            optax.softmax_cross_entropy_with_integer_labels(
+                model_outputs.logits[:, :-1], batch.input_ids[:, 1:]
+            )
+            * batch.attention_mask[:, 1:]
+        )
+        loss = per_token_loss.sum() / batch.attention_mask.sum()
+
+    return loss
 
 
 class Trainer:
@@ -206,33 +269,22 @@ class Trainer:
             def compute_loss(
                 params: FrozenDict, batch: Dict, dropout_rng: Array
             ) -> Scalar:
-                model_outputs = train_state.apply_fn(
-                    batch.input_ids,
-                    attention_mask=batch.attention_mask,
-                    position_ids=batch.position_ids,
-                    decoder_input_ids=jnp.concatenate(
-                        (batch.decoder_prompt, batch.targets), axis=-1
-                    ),
-                    decoder_attention_mask=jnp.concatenate(
-                        (
-                            batch.decoder_prompt_attention_mask,
-                            batch.target_attention_mask,
-                        ),
-                        axis=-1,
-                    ),
-                    decoder_position_ids=jnp.concatenate(
-                        (batch.decoder_prompt_position_ids, batch.target_position_ids),
-                        axis=-1,
-                    ),
-                    params=params,
-                    train=self.use_dropout,
-                    dropout_rng=dropout_rng if self.use_dropout else None,
-                )
-
-                loss = loss_fn(
-                    model_outputs.logits, batch.targets, batch.target_attention_mask
-                )
-                return loss
+                if self.model_config.is_encoder_decoder:
+                    return encoder_decoder_loss_fn(
+                        train_state.apply_fn,
+                        params,
+                        batch,
+                        self.use_dropout,
+                        dropout_rng,
+                    )
+                else:
+                    return decoder_only_loss_fn(
+                        train_state.apply_fn,
+                        params,
+                        batch,
+                        self.use_dropout,
+                        dropout_rng,
+                    )
 
             dynamic_scale = train_state.dynamic_scale
 
