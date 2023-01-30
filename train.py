@@ -44,23 +44,51 @@ def train(_):
     trainer = flax_trainer.Trainer(model_cls, config.trainer_args)
 
     train_dataset = datasets.load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
+    eval_dataset = datasets.load_dataset("oscar", "unshuffled_deduplicated_no", split="test")
 
     train_dataset = data.PerHostDataset(
-        train_dataset,
-        config.data_args.global_data_shape,
-        trainer.mesh,
-        config.data_args.data_axes,
-        tokenizer,
-        config.data_args.text_column_name,
-        config.data_args.remove_columns,
-        config.data_args.num_workers,
-        config.data_args.block_size,
-        config.data_args.tokenize_batch_size,
-        config.data_args.group_batch_size,
+        dataset=train_dataset,
+        global_data_shape=config.data_args.train.global_data_shape,
+        global_mesh=trainer.mesh,
+        data_axes=config.data_args.data_axes,
+        tokenizer=tokenizer,
+        input_ids_columns_name=config.data_args.train.input_ids_column_name,
+        remove_columns=config.data_args.train.remove_columns,
+        num_workers=config.data_args.num_workers,
+        tokenize_batch_size=config.data_args.tokenize_batch_size,
+        group_batch_size=config.data_args.group_batch_size,
+        mode=config.data_args.mode,
+        decoder_input_ids_column_name=config.data_args.train.decoder_input_ids_column_name,
+        block_size=config.data_args.block_size,
+        pad_value=tokenizer.pad_token_id,
+        pad_right=config.data_args.pad_right,
+        max_len=config.data_args.max_len,
+        trunc_end=config.data_args.trunc_end,
+        decoder_max_len=config.data_args.decoder_max_len,
+        decoder_trunc_end=config.data_args.decoder_trunc_end,
     )
 
-    #train_data = data.prepare_data(config.data_args.train.dataset, tokenizer)
-    #eval_data = data.prepare_data(config.data_args.eval.dataset, tokenizer)
+    eval_dataset = data.PerHostDataset(
+        dataset=eval_dataset,
+        global_data_shape=config.data_args.eval.global_data_shape,
+        global_mesh=trainer.mesh,
+        data_axes=config.data_args.data_axes,
+        tokenizer=tokenizer,
+        input_ids_columns_name=config.data_args.eval.input_ids_column_name,
+        remove_columns=config.data_args.eval.remove_columns,
+        num_workers=config.data_args.num_workers,
+        tokenize_batch_size=config.data_args.tokenize_batch_size,
+        group_batch_size=config.data_args.group_batch_size,
+        mode=config.data_args.mode,
+        decoder_input_ids_column_name=config.data_args.eval.decoder_input_ids_column_name,
+        block_size=config.data_args.block_size,
+        pad_value=tokenizer.pad_token_id,
+        pad_right=config.data_args.pad_right,
+        max_len=config.data_args.max_len,
+        trunc_end=config.data_args.trunc_end,
+        decoder_max_len=config.data_args.decoder_max_len,
+        decoder_trunc_end=config.data_args.decoder_trunc_end,
+    )
 
     def run_eval(trainer, eval_data):
         pass

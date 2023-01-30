@@ -84,22 +84,6 @@ def pad_sequence(sequence, max_len, pad_value, pad_right):
         return pad_tokens + sequence, zeros + ones
 
 
-def block_sequences(sequences, max_len, pad_value, pad_right, trunc_last):
-    if max_len is None:
-        max_len = max(map(lambda x: len(x), sequences))
-
-    full_sequences = []
-    for i in range(len(sequences)):
-        if trunc_last:
-            new_toks = sequences[i][:max_len]
-        else:
-            new_toks = sequences[i][-max_len:]
-        padded, mask = pad_sequence(new_toks, max_len, pad_value, pad_right=pad_right)
-        full_sequences.append(padded)
-
-    return full_sequences
-
-
 def preprocess_seq2seq(
     dataset: datasets.Dataset,
     tokenizer: Callable,
@@ -110,9 +94,9 @@ def preprocess_seq2seq(
     pad_value: int,
     pad_right: bool,
     max_len: int,
-    trunc_last: bool,
+    trunc_end: bool,
     decoder_max_len: Optional[int] = None,
-    decoder_trunc_last: bool = True,
+    decoder_trunc_end: bool = True,
     decoder_input_ids_column_name: Optional[str] = None,
     remove_columns: Optional[List[str]] = None,
 ):
@@ -146,7 +130,7 @@ def preprocess_seq2seq(
         if decoder_input_ids_column_name:
             output = {**output, "decoder_input_ids": [], "decoder_attention_mask": []}
         for i in range(len(examples["input_ids"])):
-            if trunc_last:
+            if trunc_end:
                 new_tokens = examples["input_ids"][i][:max_len]
             else:
                 new_tokens = examples["input_ids"][i][-max_len:]
@@ -154,7 +138,7 @@ def preprocess_seq2seq(
             output["input_ids"].append(padded)
             output["attention_mask"].append(mask)
             if decoder_input_ids_column_name:
-                if decoder_trunc_last:
+                if decoder_trunc_end:
                     new_tokens = examples["decoder_input_ids"][i][:max_len]
                 else:
                     new_tokens = examples["decoder_input_ids"][i][-max_len:]
@@ -363,9 +347,9 @@ class PerHostDataset:
         pad_value: Optional[int] = None,
         pad_right: Optional[bool] = None,
         max_len: Optional[int] = None,
-        trunc_last: Optional[bool] = None,
+        trunc_end: Optional[bool] = None,
         decoder_max_len: Optional[int] = None,
-        decoder_trunc_last: bool = True,
+        decoder_trunc_end: bool = True,
     ):
         self.global_data_shape = global_data_shape
         self.global_mesh = global_mesh
@@ -414,9 +398,9 @@ class PerHostDataset:
                 pad_value=pad_value,
                 pad_right=pad_right,
                 max_len=max_len,
-                trunc_last=trunc_last,
+                trunc_end=trunc_end,
                 decoder_max_len=decoder_max_len,
-                decoder_trunc_last=decoder_trunc_last,
+                decoder_trunc_end=decoder_trunc_end,
             )
         elif mode == "clm":
             preprocess_fn = partial(
