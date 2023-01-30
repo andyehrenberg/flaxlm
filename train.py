@@ -1,9 +1,12 @@
 import json
+from absl import app, flags
 
 import jax
 import ml_collections
 import transformers
-from absl import app, flags
+import datasets
+import jax.numpy as jnp
+import jax.random as jrandom
 
 import src.trainer as flax_trainer
 import src.utils as utils
@@ -32,11 +35,28 @@ def train(_):
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_path)
 
-    train_data = data.prepare_data(config.data_args.train.dataset, tokenizer)
-    eval_data = data.prepare_data(config.data_args.eval.dataset, tokenizer)
-
+    rng = jrandom.PRNGKey(config.trainer_args.seed)
 
     trainer = flax_trainer.Trainer(model_cls, config.trainer_args)
+
+    train_dataset = datasets.load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
+
+    train_dataset = data.PerHostDataset(
+        train_dataset,
+        config.data_args.global_data_shape,
+        trainer.mesh,
+        config.data_args.data_axes,
+        tokenizer,
+        config.data_args.text_column_name,
+        config.data_args.remove_columns,
+        config.data_args.num_workers,
+        config.data_args.block_size,
+        config.data_args.tokenize_batch_size,
+        config.data_args.group_batch_size,
+    )
+    
+    #train_data = data.prepare_data(config.data_args.train.dataset, tokenizer)
+    #eval_data = data.prepare_data(config.data_args.eval.dataset, tokenizer)
 
     def run_eval(trainer, eval_data):
         pass
@@ -46,16 +66,14 @@ def train(_):
     eval_metrics = run_eval(trainer, eval_data)
 
     for epoch in range(num_epochs):
-        loader = data.get_per_replica_data_pipeline(
-            train_data,
-            pytree_of_ShapedTypeStructs,
-            trainer.mesh,
-            pytree_of_partition_specs,
-        )
-            # trainer.batch_size_per_host
-        for batch in loader:
+        key, rng = jrandom.split(rng)
+        for batch in train_dataset.set_epoch(key):
             metrics = trainer.train_step(batch)
+            num_steps += 1
+            if jax.process_index() == 0:
+                log_metrics(metrics, num_steps)
         eval_metrics = run_eval(trainer, eval_data)
+        log_metrics(eval_metrics, num_steps)
 
     if jax.process_index() == 0:
         if save:

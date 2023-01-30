@@ -16,23 +16,21 @@ import utils
 
 def encoder_decoder_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
     model_outputs = apply_fn(
-        batch.input_ids,
-        attention_mask=batch.attention_mask,
-        position_ids=batch.position_ids,
-        decoder_input_ids=batch.decoder_input_ids,
-        decoder_attention_mask=batch.decoder_attention_mask,
-        decoder_position_ids=batch.decoder_position_ids,
+        batch["input_ids"],
+        attention_mask=batch["attention_mask"],
+        decoder_input_ids=batch["decoder_input_ids"],
+        decoder_attention_mask=batch["decoder_attention_mask"],
         params=params,
         train=use_dropout,
         dropout_rng=dropout_rng if use_dropout else None,
     )
     per_token_loss = (
         optax.softmax_cross_entropy_with_integer_labels(
-            model_outputs.logits[:, :-1], batch.decoder_input_ids[:, 1:]
+            model_outputs.logits[:, :-1], batch["decoder_input_ids"][:, 1:]
         )
-        * batch.decoder_attention_mask[:, 1:]
+        * batch["decoder_attention_mask"][:, 1:]
     )
-    loss = per_token_loss.sum() / batch.decoder_attention_mask[:, 1:].sum()
+    loss = per_token_loss.sum() / batch["decoder_attention_mask"][:, 1:].sum()
 
     return loss
 
@@ -40,11 +38,11 @@ def encoder_decoder_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
 def decoder_only_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
     if hasattr(batch, "decoder_input_ids"):
         input_ids = jnp.concatenate(
-            (batch.input_ids, batch.decoder_input_ids),
+            (batch["input_ids"], batch["decoder_input_ids"]),
             axis=1,
         )
         attention_mask = jnp.concatenate(
-            (batch.attention_mask, batch.decoder_attention_mask),
+            (batch["attention_mask"], batch["decoder_attention_mask"]),
             axis=1,
         )
         position_ids = jnp.maximum(jnp.cumsum(attention_mask, axis=1) - 1, 0).astype(
@@ -60,28 +58,27 @@ def decoder_only_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
         )
         per_token_loss = (
             optax.softmax_cross_entropy_with_integer_labels(
-                model_outputs.logits[:, (batch.input_ids.shape[1] - 1) : -1, :],
-                batch.decoder_input_ids,
+                model_outputs.logits[:, (batch["input_ids"].shape[1] - 1) : -1, :],
+                batch["decoder_input_ids"],
             )
-            * batch.decoder_attention_mask
+            * batch["decoder_attention_mask"]
         )
-        loss = per_token_loss.sum() / batch.decoder_attention_mask.sum()
+        loss = per_token_loss.sum() / batch["decoder_attention_mask"].sum()
     else:
         model_outputs = apply_fn(
-            batch.input_ids,
-            attention_mask=batch.attention_mask,
-            position_ids=batch.position_ids,
+            batch["input_ids"],
+            attention_mask=batch["attention_mask"],
             params=params,
             train=use_dropout,
             dropout_rng=dropout_rng if use_dropout else None,
         )
         per_token_loss = (
             optax.softmax_cross_entropy_with_integer_labels(
-                model_outputs.logits[:, :-1], batch.input_ids[:, 1:]
+                model_outputs.logits[:, :-1], batch["input_ids"][:, 1:]
             )
-            * batch.attention_mask[:, 1:]
+            * batch["attention_mask"][:, 1:]
         )
-        loss = per_token_loss.sum() / batch.attention_mask.sum()
+        loss = per_token_loss.sum() / batch["attention_mask"].sum()
 
     return loss
 
