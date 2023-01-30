@@ -434,6 +434,7 @@ class PerHostDataset:
             num_workers=num_workers,
             tokenize_batch_size=tokenize_batch_size,
             group_batch_size=group_batch_size,
+            decoder_input_ids_column_name=decoder_input_ids_column_name,
         )
 
         check_inputs(self.sharded_dataset, self.global_data_shape, self.data_axes)
