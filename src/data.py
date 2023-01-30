@@ -71,7 +71,112 @@ def data_loader(
         yield batch
 
 
-def preprocess(
+def pad_sequence(sequence, max_len, pad_value, pad_right):
+    assert len(sequence) <= max_len, "sequence has size larger than max_len"
+
+    pad_tokens = [pad_value for _ in range(max_len - len(sequence))]
+    ones = [1 for _ in range(len(sequence))]
+    zeros = [0 for _ in range(max_len - len(sequence))]
+
+    if pad_right:
+        return sequence + pad_tokens, ones + zeros
+    else:
+        return pad_tokens + sequence, zeros + ones
+
+
+def block_sequences(sequences, max_len, pad_value, pad_right, trunc_last):
+    if max_len is None:
+        max_len = max(map(lambda x: len(x), sequences))
+
+    full_sequences = []
+    for i in range(len(sequences)):
+        if trunc_last:
+            new_toks = sequences[i][:max_len]
+        else:
+            new_toks = sequences[i][-max_len:]
+        padded, mask = pad_sequence(new_toks, max_len, pad_value, pad_right=pad_right)
+        full_sequences.append(padded)
+
+    return full_sequences
+
+
+def preprocess_seq2seq(
+    dataset: datasets.Dataset,
+    tokenizer: Callable,
+    num_workers: int,
+    tokenize_batch_size: int,
+    group_batch_size: int,
+    input_ids_column_name: str,
+    pad_value: int,
+    pad_right: bool,
+    max_len: int,
+    trunc_last: bool,
+    decoder_max_len: Optional[int] = None,
+    decoder_trunc_last: bool = True,
+    decoder_input_ids_column_name: Optional[str] = None,
+    remove_columns: Optional[List[str]] = None,
+):
+    remove_columns = (
+        remove_columns + [input_ids_column_name]
+        if remove_columns
+        else [input_ids_column_name]
+    )
+
+    if decoder_input_ids_column_name:
+        remove_columns += [decoder_input_ids_column_name]
+
+    def tokenize_function(examples):
+        output = tokenizer(examples[input_ids_column_name])
+        if decoder_input_ids_column_name:
+            decoder_inputs = tokenizer(examples[decoder_input_ids_column_name])
+            output["decoder_input_ids"] = decoder_inputs.pop("input_ids")
+            output["decoder_attention_mask"] = decoder_inputs.pop("attention_mask")
+        return output
+
+    tokenized_dataset = dataset.map(
+        tokenize_function,
+        batched=True,
+        batch_size=tokenize_batch_size,
+        num_proc=num_workers,
+        remove_columns=remove_columns,
+    )
+
+    def block_sequences(examples):
+        output = {"input_ids": [], "attention_mask": []}
+        if decoder_input_ids_column_name:
+            output = {**output, "decoder_input_ids": [], "decoder_attention_mask": []}
+        for i in range(len(examples["input_ids"])):
+            if trunc_last:
+                new_tokens = examples["input_ids"][i][:max_len]
+            else:
+                new_tokens = examples["input_ids"][i][-max_len:]
+            padded, mask = pad_sequence(new_tokens, max_len, pad_value, pad_right)
+            output["input_ids"].append(padded)
+            output["attention_mask"].append(mask)
+            if decoder_input_ids_column_name:
+                if decoder_trunc_last:
+                    new_tokens = examples["decoder_input_ids"][i][:max_len]
+                else:
+                    new_tokens = examples["decoder_input_ids"][i][-max_len:]
+                padded, mask = pad_sequence(
+                    new_tokens, decoder_max_len, pad_value, pad_right
+                )
+                output["decoder_input_ids"].append(padded)
+                output["decoder_attention_mask"].append(mask)
+
+        return output
+
+    data = tokenized_dataset.map(
+        block_sequences,
+        batched=True,
+        batch_size=group_batch_size,
+        num_proc=num_workers,
+    )
+
+    return data
+
+
+def preprocess_clm(
     dataset: datasets.Dataset,
     tokenizer: Callable,
     num_workers: int,
@@ -247,12 +352,20 @@ class PerHostDataset:
         global_mesh: Mesh,
         data_axes: P,
         tokenizer: Callable,
-        text_column_name: str,
+        input_ids_column_name: str,
         remove_columns: str,
         num_workers: int,
-        block_size: int,
         tokenize_batch_size: int,
         group_batch_size: int,
+        mode: str = "seq2seq",
+        decoder_input_ids_column_name: Optional[str] = None,
+        block_size: Optional[int] = None,
+        pad_value: Optional[int] = None,
+        pad_right: Optional[bool] = None,
+        max_len: Optional[int] = None,
+        trunc_last: Optional[bool] = None,
+        decoder_max_len: Optional[int] = None,
+        decoder_trunc_last: bool = True,
     ):
         self.global_data_shape = global_data_shape
         self.global_mesh = global_mesh
@@ -295,15 +408,32 @@ class PerHostDataset:
         if isinstance(dataset, str):
             dataset = datasets.load_dataset(dataset)
 
-        self.sharded_dataset = preprocess(
+        if mode == "seq2seq":
+            preprocess_fn = partial(
+                preprocess_seq2seq,
+                pad_value=pad_value,
+                pad_right=pad_right,
+                max_len=max_len,
+                trunc_last=trunc_last,
+                decoder_max_len=decoder_max_len,
+                decoder_trunc_last=decoder_trunc_last,
+            )
+        elif mode == "clm":
+            preprocess_fn = partial(
+                preprocess_clm,
+                block_size=block_size,
+            )
+        else:
+            raise NotImplementedError("Mode can either be seq2seq or clm")
+
+        self.sharded_dataset = preprocess_fn(
             dataset.shard(num_shards=num_shards, index=local_data_shard_index),
-            tokenizer,
-            text_column_name,
-            remove_columns,
-            num_workers,
-            block_size,
-            tokenize_batch_size,
-            group_batch_size,
+            tokenizer=tokenizer,
+            input_ids_column_name=input_ids_column_name,
+            remove_columns=remove_columns,
+            num_workers=num_workers,
+            tokenize_batch_size=tokenize_batch_size,
+            group_batch_size=group_batch_size,
         )
 
         check_inputs(self.sharded_dataset, self.global_data_shape, self.data_axes)

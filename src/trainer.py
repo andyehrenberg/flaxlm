@@ -304,7 +304,9 @@ class Trainer:
 
                 dropout_rng, _ = jrandom.split(dropout_rng)
 
-                (loss, weight), grads = grad_fn(train_state.params, minibatch, dropout_rng)
+                (loss, weight), grads = grad_fn(
+                    train_state.params, minibatch, dropout_rng
+                )
 
                 grads = nn.with_logical_constraint(grads, self.param_spec)
 

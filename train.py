@@ -35,6 +35,10 @@ def train(_):
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_path)
 
+    if tokenizer.pad_token_id is None:
+        tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
     rng = jrandom.PRNGKey(config.trainer_args.seed)
 
     trainer = flax_trainer.Trainer(model_cls, config.trainer_args)
@@ -54,7 +58,7 @@ def train(_):
         config.data_args.tokenize_batch_size,
         config.data_args.group_batch_size,
     )
-    
+
     #train_data = data.prepare_data(config.data_args.train.dataset, tokenizer)
     #eval_data = data.prepare_data(config.data_args.eval.dataset, tokenizer)
 
