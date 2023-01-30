@@ -32,9 +32,11 @@ def encoder_decoder_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
         )
         * batch["decoder_attention_mask"][:, 1:]
     )
-    loss = per_token_loss.sum() / batch["decoder_attention_mask"][:, 1:].sum()
+    weight = batch["decoder_attention_mask"][:, 1:].sum()
 
-    return loss
+    loss = per_token_loss.sum() / weight
+
+    return loss, weight
 
 
 def decoder_only_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
@@ -65,7 +67,8 @@ def decoder_only_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
             )
             * batch["decoder_attention_mask"]
         )
-        loss = per_token_loss.sum() / batch["decoder_attention_mask"].sum()
+        weight = batch["decoder_attention_mask"].sum()
+        loss = per_token_loss.sum() / weight
     else:
         model_outputs = apply_fn(
             batch["input_ids"],
@@ -80,9 +83,10 @@ def decoder_only_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
             )
             * batch["attention_mask"][:, 1:]
         )
-        loss = per_token_loss.sum() / batch["attention_mask"].sum()
+        weight = batch["attention_mask"][:, 1:].sum()
+        loss = per_token_loss.sum() / weight
 
-    return loss
+    return loss, weight
 
 
 class Trainer:
@@ -289,7 +293,7 @@ class Trainer:
 
             dynamic_scale = train_state.dynamic_scale
 
-            grad_fn = dynamic_scale.value_and_grad(compute_loss)
+            grad_fn = dynamic_scale.value_and_grad(compute_loss, has_aux=True)
 
             def loss_and_grad(grad_idx, dropout_rng):
                 minibatch = (
@@ -300,8 +304,7 @@ class Trainer:
 
                 dropout_rng, _ = jrandom.split(dropout_rng)
 
-                weight = minibatch.target_attention_mask.sum()
-                loss, grads = grad_fn(train_state.params, minibatch, dropout_rng)
+                (loss, weight), grads = grad_fn(train_state.params, minibatch, dropout_rng)
 
                 grads = nn.with_logical_constraint(grads, self.param_spec)
 

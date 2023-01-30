@@ -74,15 +74,29 @@ def data_loader(
 def preprocess(
     dataset: datasets.Dataset,
     tokenizer: Callable,
-    text_column_name: str,
-    remove_columns: str,
     num_workers: int,
     block_size: int,
     tokenize_batch_size: int,
     group_batch_size: int,
+    input_ids_column_name: str,
+    decoder_input_ids_column_name: Optional[str] = None,
+    remove_columns: Optional[List[str]] = None,
 ):
+    remove_columns = (
+        remove_columns + [input_ids_column_name]
+        if remove_columns
+        else [input_ids_column_name]
+    )
+
+    if decoder_input_ids_column_name:
+        remove_columns += [decoder_input_ids_column_name]
+
     def tokenize_function(examples):
-        output = tokenizer(examples[text_column_name])
+        output = tokenizer(examples[input_ids_column_name])
+        if decoder_input_ids_column_name:
+            decoder_inputs = tokenizer(examples[decoder_input_ids_column_name])
+            output["decoder_input_ids"] = decoder_inputs.pop("input_ids")
+            output["decoder_attention_mask"] = decoder_inputs.pop("attention_mask")
         return output
 
     tokenized_dataset = dataset.map(
