@@ -12,9 +12,7 @@ import jax.lax as lax
 import jax.numpy as jnp
 import ml_collections as mlc
 from chex import Array
-from jax.experimental.maps import Mesh
-from jax.experimental.mesh_utils import create_hybrid_device_mesh
-from jax.sharding import Mesh, PartitionSpec
+from jax.sharding import PartitionSpec
 
 P = PartitionSpec
 
@@ -131,29 +129,6 @@ class NoOp(flax.struct.PyTreeNode):
         has_aux: bool = False,
     ) -> Callable:
         return jax.value_and_grad(fun, argnums, has_aux)
-
-
-def get_gpu_mesh(num_partitions: int):
-    nvlink_size = jax.local_device_count()
-    dcn_size = jax.process_count()
-    nvlink_mp = min(num_partitions, nvlink_size)
-    nvlink_dp, extra1 = divmod(nvlink_size, nvlink_mp)
-    dcn_mp, extra2 = divmod(num_partitions, nvlink_mp)
-
-    assert not (
-        extra1 or extra2
-    ), "number of partitions on GPU must be a factor or multiple of the number of local devices"
-
-    dcn_dp = dcn_size // dcn_mp
-    devices = create_hybrid_device_mesh(
-        mesh_shape=[nvlink_dp, nvlink_mp],
-        dcn_mesh_shape=[dcn_dp, dcn_mp],
-        process_is_granule=True,
-    )
-
-    global_mesh = Mesh(devices, ("data", "model"))
-
-    return global_mesh
 
 
 def setup_model(

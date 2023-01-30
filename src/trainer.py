@@ -12,6 +12,8 @@ from flax.core.frozen_dict import FrozenDict
 from jax.experimental.pjit import PartitionSpec
 
 import utils
+import mesh_utils
+import partitioning_utils
 
 
 def encoder_decoder_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
@@ -111,7 +113,7 @@ class Trainer:
             self.batch_size,
             self.loader_batch_size,
             self.node_groups,
-        ) = utils.convert_per_device_batch_size(
+        ) = partitioning_utils.convert_per_device_batch_size(
             self.per_device_batch_size, self.mp_num, self.gradient_accumulation_steps
         )
 
@@ -120,7 +122,7 @@ class Trainer:
             self.eval_batch_size,
             _,
             _,
-        ) = utils.convert_per_device_batch_size(
+        ) = partitioning_utils.convert_per_device_batch_size(
             self.per_device_eval_batch_size, self.mp_num, 1
         )
         self.eval_loader_batch_size = self.eval_batch_size * self.node_groups
@@ -135,9 +137,9 @@ class Trainer:
         else:
             self.dtype = jnp.float32
 
-        self.mesh = utils.get_gpu_mesh(self.mp_num)
+        self.mesh = mesh_utils.default_mesh(self.mp_num)
 
-        rules = utils.make_partitioning_rules(
+        rules = partitioning_utils.make_partitioning_rules(
             args.parallelism_args.activation_partitioning_dims,
             args.parallelism_args.parameter_partitioning_dims,
             self.mp_num,
@@ -221,7 +223,9 @@ class Trainer:
         else:
             dynamic_scale = utils.NoOp()
 
-        params = utils.shard_logically_partitioned_params(params, self.mesh)
+        params = partitioning_utils.shard_logically_partitioned_params(
+            params, self.mesh
+        )
 
         @self.with_mesh
         @jax.jit
