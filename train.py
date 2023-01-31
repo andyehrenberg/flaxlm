@@ -11,6 +11,7 @@ import jax.random as jrandom
 import src.trainer as flax_trainer
 import src.utils as utils
 import src.data as data
+import src.mesh_utils as mesh_utils
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -27,11 +28,8 @@ def train(_):
     num_epochs = config.trainer_args.sampling_args.num_epochs
     save = config.trainer_args.save
     save_dir = config.trainer_args.output_dir
-    num_train_steps = config.trainer_args.sampling_args.num_train_steps
-    eval_interval = config.trainer_args.eval_args.eval_interval
     tokenizer_path = config.trainer_args.model_args.tokenizer_path
     model_cls = config.trainer_args.model_args.model_cls
-    num_epochs = num_train_steps // eval_interval
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_path)
 
@@ -41,7 +39,9 @@ def train(_):
 
     rng = jrandom.PRNGKey(config.trainer_args.seed)
 
-    trainer = flax_trainer.Trainer(model_cls, config.trainer_args)
+    mesh = mesh_utils.setup_mesh_and_partitioning_rules(
+        config.trainer_args.parallelism_args
+    )
 
     train_dataset = datasets.load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
     eval_dataset = datasets.load_dataset("oscar", "unshuffled_deduplicated_no", split="test")
@@ -89,6 +89,10 @@ def train(_):
         decoder_max_len=config.data_args.decoder_max_len,
         decoder_trunc_end=config.data_args.decoder_trunc_end,
     )
+
+    # get data length and add to config.trainer_args.num_train_steps
+
+    trainer = flax_trainer.Trainer(model_cls, config.trainer_args, mesh)
 
     def run_eval(trainer, eval_data):
         pass

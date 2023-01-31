@@ -8,9 +8,9 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import numpy as np
 from chex import Array, Scalar
+import flax.linen as nn
 from jax.experimental import global_device_array as gda_lib
 from jax.experimental.global_device_array import Device
-from jax.experimental.maps import Mesh
 import jax.experimental.multihost_utils as multihost_utils
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
 
@@ -321,8 +321,10 @@ def get_next_per_host(
         )
         return global_array
 
+    mesh_data_axes = nn.logical_to_mesh_axes(data_axes)
+
     global_arrays = jax.tree_map(
-        form_global_array, local_data, global_data_shape, data_axes
+        form_global_array, local_data, global_data_shape, mesh_data_axes
     )
 
     return global_arrays

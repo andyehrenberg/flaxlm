@@ -1,19 +1,19 @@
 from functools import partial
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Tuple, Type
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
-import numpy as np
 import optax
 from chex import Array, Scalar
 from flax.core.frozen_dict import FrozenDict
-from jax.experimental.pjit import PartitionSpec
+from jax.sharding import Mesh, PartitionSpec
 
 import utils
-import mesh_utils
 import partitioning_utils
+
+P = PartitionSpec
 
 
 def encoder_decoder_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
@@ -90,19 +90,16 @@ def decoder_only_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
 
 
 class Trainer:
-    def __init__(self, model_cls, args):
+    def __init__(self, model_cls: Type, args: Dict, mesh: Mesh):
         self.gradient_accumulation_steps = (
             args.sampling_args.gradient_accumulation_steps
         )
         self.lr_init = args.optimizer_args.lr_init
-        self.lr_end = args.optimizer_args.lr_end
         self.warmup_steps = args.optimizer_args.warmup_steps
-        self.transition_length = args.optimizer_args.transition_length
         self.max_grad_norm = args.optimizer_args.max_grad_norm
         self.use_dropout = args.optimizer_args.use_dropout
         self.num_epochs = args.sampling_args.num_epochs
         pretrained_path = args.model_args.pretrained_model_name_or_path
-        self.max_prompt_length = args.sampling_args.max_prompt_length
         self.num_train_steps = args.sampling_args.num_train_steps
         self.half_precision = args.optimizer_args.half_precision
         self.mp_num = args.parallelism_args.mp_num
@@ -111,6 +108,7 @@ class Trainer:
 
         self.per_device_batch_size = args.sampling_args.per_device_batch_size
         self.per_device_eval_batch_size = args.eval_args.per_device_eval_batch_size
+        self.max_generation_new_tokens = args.eval_args.max_generation_new_tokens
 
         (
             self.per_node_per_grad_step_batch_size,
@@ -141,14 +139,7 @@ class Trainer:
         else:
             self.dtype = jnp.float32
 
-        self.mesh = mesh_utils.default_mesh(self.mp_num)
-
-        rules = partitioning_utils.make_partitioning_rules(
-            args.parallelism_args.activation_partitioning_dims,
-            args.parallelism_args.parameter_partitioning_dims,
-            self.mp_num,
-        )
-        nn.set_logical_axis_rules(rules)
+        self.mesh = mesh
 
         rng = jax.random.PRNGKey(args.seed)
         rng, dropout_rng = jax.random.split(rng)
@@ -161,28 +152,20 @@ class Trainer:
             self.dtype,
             gradient_checkpointing,
         )
-        # Offload to CPU
-        params = jax.tree_util.tree_map(lambda x: np.asarray(x), params)
         self.model_config = model.config
-
-        self.max_target_length = args.sampling_args.max_target_length - len(
-            self.model_config.forced_decoder_ids
-        )
 
         self.setup_train_state(model, eval_model, params, dropout_rng)
         del params
         self.param_spec = self.train_state_spec.params
-        self.batch_spec = PartitionSpec(
-            "batch",
-        )
-        self.grad_batch_spec = PartitionSpec(None, "batch")
+        self.batch_spec = P("batch")
+        self.grad_batch_spec = P(None, "batch")
 
         self.train = self.with_mesh(jax.jit(self.make_train_step()))
         self.generate = self.with_mesh(
             jax.jit(
                 partial(
                     self.make_generate(),
-                    max_new_tokens=self.max_target_length,
+                    max_new_tokens=self.max_generation_new_tokens,
                 )
             )
         )
