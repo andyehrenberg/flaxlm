@@ -90,7 +90,8 @@ def train(_):
         decoder_trunc_end=config.data_args.decoder_trunc_end,
     )
 
-    # get data length and add to config.trainer_args.num_train_steps
+    steps_per_epoch = train_dataset._global_min_length
+    config.trainer_args.num_train_steps = steps_per_epoch * num_epochs
 
     trainer = flax_trainer.Trainer(model_cls, config.trainer_args, mesh)
 
@@ -99,7 +100,7 @@ def train(_):
 
     num_steps = 0
 
-    eval_metrics = run_eval(trainer, eval_data)
+    eval_metrics = run_eval(trainer, eval_dataset)
 
     for epoch in range(num_epochs):
         key, rng = jrandom.split(rng)
@@ -108,7 +109,7 @@ def train(_):
             num_steps += 1
             if jax.process_index() == 0:
                 log_metrics(metrics, num_steps)
-        eval_metrics = run_eval(trainer, eval_data)
+        eval_metrics = run_eval(trainer, eval_dataset)
         log_metrics(eval_metrics, num_steps)
 
     if jax.process_index() == 0:

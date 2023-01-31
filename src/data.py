@@ -283,19 +283,19 @@ def convert_global_indices_to_local_indices(
     unique_slice_sizes = {idx: idx[1] - idx[0] for idx in data_indices}
 
     # assign a unique local data slice to each device
-    total_data_to_load = 0
+    host_batch_size = 0
     device_index_hash_to_local_index = {}
     for idx, size in unique_slice_sizes.items():
         device_index_hash_to_local_index[idx] = slice(
-            total_data_to_load, total_data_to_load + size
+            host_batch_size, host_batch_size + size
         )
-        total_data_to_load += size
+        host_batch_size += size
 
     device_to_local_indices = {}
     for device, data_index in zip(jax.local_devices(), data_indices):
         device_to_local_indices[device] = device_index_hash_to_local_index[data_index]
 
-    return device_to_local_indices, total_data_to_load
+    return device_to_local_indices, host_batch_size
 
 
 def get_next_per_host(
@@ -381,11 +381,11 @@ class PerHostDataset:
         print("Host to dataset: ", host_to_dataset_shard)
         (
             self.host_local_indices,
-            self.total_data_to_load,
+            self.host_batch_size,
         ) = convert_global_indices_to_local_indices(representative_device_to_index)
 
         print("Host local indices: ", self.host_local_indices)
-        print("Host batch size: ", self.total_data_to_load)
+        print("Host batch size: ", self.host_batch_size)
 
         local_data_shard_index = host_to_dataset_shard[jax.process_index()]
 
@@ -428,7 +428,7 @@ class PerHostDataset:
     def set_epoch(self, rng):
         loader = data_loader(
             self.sharded_dataset,
-            self.total_data_to_load,
+            self.host_batch_size,
             self.global_data_shape,
             rng=rng,
             shuffle=True,
@@ -449,6 +449,6 @@ class PerHostDataset:
 
     @cached_property
     def _global_min_length(self):
-        local_length = len(self.sharded_dataset) // self.total_data_to_load
+        local_length = len(self.sharded_dataset) // self.host_batch_size
         all_lengths = multihost_utils.process_allgather(jnp.array(local_length))
         return int(jnp.min(all_lengths))
