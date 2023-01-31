@@ -100,7 +100,7 @@ class Trainer:
         self.use_dropout = args.optimizer_args.use_dropout
         self.num_epochs = args.sampling_args.num_epochs
         pretrained_path = args.model_args.pretrained_model_name_or_path
-        self.num_train_steps = args.sampling_args.num_train_steps
+        self.num_train_steps = args.num_train_steps
         self.half_precision = args.optimizer_args.half_precision
         self.mp_num = args.parallelism_args.mp_num
         from_pt = args.model_args.from_pt
