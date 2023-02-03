@@ -22,21 +22,22 @@ import jax.numpy as jnp
 import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
+from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
-from gptj_config_remat import GPTJConfig
 from jax import lax
-from transformers.modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
-from transformers.modeling_flax_utils import (
-    ACT2FN,
-    FlaxPreTrainedModel,
-    append_call_sample_docstring,
-)
-from transformers.utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from jax.sharding import PartitionSpec
+from transformers.modeling_flax_outputs import (FlaxBaseModelOutput,
+                                                FlaxCausalLMOutput)
+from transformers.modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                              append_call_sample_docstring)
+from transformers.utils import (add_start_docstrings,
+                                add_start_docstrings_to_model_forward, logging)
+
+from src.transformers_patch.gptj_config_remat import GPTJConfig
+
+P = PartitionSpec
+remat = nn_partitioning.remat
 
 logger = logging.get_logger(__name__)
 
@@ -182,12 +183,18 @@ class FlaxGPTJAttention(nn.Module):
         )
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(
+        hidden_states = hidden_states.reshape(
             hidden_states.shape[:2] + (self.num_heads, self.head_dim)
+        )
+        return nn.with_logical_constraint(
+            hidden_states, P("batch", "length", "heads", "embed")
         )
 
     def _merge_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
+        hidden_states = hidden_states.reshape(
+            hidden_states.shape[:2] + (self.embed_dim,)
+        )
+        return nn.with_logical_constraint(hidden_states, P("batch", "length", "embed"))
 
     @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
@@ -601,8 +608,12 @@ class FlaxGPTJBlockCollection(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
+        block = FlaxGPTJBlock
+        if self.config.gradient_checkpointing:
+            FlaxGPT2CheckpointBlock = remat(block, static_argnums=(3, 4, 5))
+            block = FlaxGPT2CheckpointBlock
         self.blocks = [
-            FlaxGPTJBlock(self.config, name=str(i), dtype=self.dtype)
+            block(self.config, name=str(i), dtype=self.dtype)
             for i in range(self.config.num_hidden_layers)
         ]
 
@@ -627,10 +638,10 @@ class FlaxGPTJBlockCollection(nn.Module):
             layer_outputs = block(
                 hidden_states,
                 attention_mask,
-                position_ids=position_ids,
-                deterministic=deterministic,
-                init_cache=init_cache,
-                output_attentions=output_attentions,
+                position_ids,
+                deterministic,
+                init_cache,
+                output_attentions,
             )
             hidden_states = layer_outputs[0]
 

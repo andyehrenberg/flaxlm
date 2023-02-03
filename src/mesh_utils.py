@@ -15,11 +15,11 @@
 import typing
 from typing import Optional, Sequence, Tuple, Union
 
+import flax.linen as nn
 import jax
+import numpy as np
 from jax.experimental.mesh_utils import create_hybrid_device_mesh
 from jax.sharding import Mesh
-import numpy as np
-import flax.linen as nn
 
 import partitioning_utils
 

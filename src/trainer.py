@@ -10,8 +10,8 @@ from chex import Array, Scalar
 from flax.core.frozen_dict import FrozenDict
 from jax.sharding import Mesh, PartitionSpec
 
-import utils
-import partitioning_utils
+import src.partitioning_utils as partitioning_utils
+import src.utils as utils
 
 P = PartitionSpec
 

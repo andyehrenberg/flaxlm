@@ -3,10 +3,8 @@ from jax.sharding import PartitionSpec
 
 P = PartitionSpec
 
-from ..transformers_patch import (
-    FlaxGPTJForCausalLM,
-    FlaxT5ForConditionalGeneration,
-)
+from ..transformers_patch import (FlaxGPTJForCausalLM,
+                                  FlaxT5ForConditionalGeneration)
 
 
 class Config(mlc.ConfigDict):

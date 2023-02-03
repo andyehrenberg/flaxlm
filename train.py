@@ -101,6 +101,7 @@ def train(_):
     num_steps = 0
 
     eval_metrics = run_eval(trainer, eval_dataset)
+    log_metrics(eval_metrics, num_steps)
 
     for epoch in range(num_epochs):
         key, rng = jrandom.split(rng)

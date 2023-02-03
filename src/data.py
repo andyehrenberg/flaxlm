@@ -1,17 +1,17 @@
 from collections import defaultdict
-from functools import partial, cached_property
+from functools import cached_property, partial
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import datasets
+import flax.linen as nn
 import jax
+import jax.experimental.multihost_utils as multihost_utils
 import jax.numpy as jnp
 import jax.random as jrandom
 import numpy as np
 from chex import Array, Scalar
-import flax.linen as nn
 from jax.experimental import global_device_array as gda_lib
 from jax.experimental.global_device_array import Device
-import jax.experimental.multihost_utils as multihost_utils
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
 
 P = PartitionSpec
