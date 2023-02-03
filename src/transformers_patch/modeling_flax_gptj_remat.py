@@ -27,12 +27,17 @@ from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.sharding import PartitionSpec
-from transformers.modeling_flax_outputs import (FlaxBaseModelOutput,
-                                                FlaxCausalLMOutput)
-from transformers.modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
-                                              append_call_sample_docstring)
-from transformers.utils import (add_start_docstrings,
-                                add_start_docstrings_to_model_forward, logging)
+from transformers.modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
+from transformers.modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+)
+from transformers.utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 
 from src.transformers_patch.gptj_config_remat import GPTJConfig
 
@@ -43,7 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gptj"
 _CONFIG_FOR_DOC = "GPTJConfig"
-_TOKENIZER_FOR_DOC = "GPTJTokenizer"
 
 
 GPTJ_START_DOCSTRING = r"""
@@ -77,7 +81,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length`. Indices of input sequence tokens in the vocabulary.
-            Indices can be obtained using [`GPTJTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -734,7 +738,6 @@ class FlaxGPTJModel(FlaxGPTJPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxGPTJModel,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutput,
     _CONFIG_FOR_DOC,

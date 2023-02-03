@@ -30,16 +30,25 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
 from jax.sharding import PartitionSpec
 from transformers.modeling_flax_outputs import (
-    FlaxBaseModelOutput, FlaxBaseModelOutputWithPastAndCrossAttentions,
-    FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput,
-    FlaxSeq2SeqModelOutput)
-from transformers.modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
-                                              append_call_sample_docstring,
-                                              append_replace_return_docstrings,
-                                              overwrite_call_docstring)
-from transformers.utils import (add_start_docstrings,
-                                add_start_docstrings_to_model_forward, logging,
-                                replace_return_docstrings)
+    FlaxBaseModelOutput,
+    FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions,
+    FlaxSeq2SeqLMOutput,
+    FlaxSeq2SeqModelOutput,
+)
+from transformers.modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
+)
+from transformers.utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 
 from src.transformers_patch.t5_config_remat import T5Config
 
@@ -50,7 +59,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "t5-small"
 _CONFIG_FOR_DOC = "T5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
@@ -924,7 +932,7 @@ T5_ENCODE_INPUTS_DOCSTRING = r"""
         input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
             To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -946,7 +954,7 @@ T5_DECODE_INPUTS_DOCSTRING = r"""
     Args:
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
             [What are decoder input IDs?](../glossary#decoder-input-ids)
             For training, `decoder_input_ids` should be provided.
@@ -983,7 +991,7 @@ T5_INPUTS_DOCSTRING = r"""
         input_ids (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
             [What are input IDs?](../glossary#input-ids)
             To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
@@ -994,7 +1002,7 @@ T5_INPUTS_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
             [What are decoder input IDs?](../glossary#decoder-input-ids)
             T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
@@ -1197,8 +1205,8 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         Returns:
         Example:
         ```python
-        >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> from transformers import AutoTokenizer, FlaxT5ForConditionalGeneration
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -1264,9 +1272,9 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         Returns:
         Example:
         ```python
-        >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxT5ForConditionalGeneration
         >>> import jax.numpy as jnp
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -1481,7 +1489,6 @@ class FlaxT5Model(FlaxT5PreTrainedModel):
 
 append_call_sample_docstring(
     FlaxT5Model,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSeq2SeqModelOutput,
     _CONFIG_FOR_DOC,
@@ -1491,8 +1498,8 @@ FLAX_T5_MODEL_DOCSTRING = """
     Returns:
     Example:
     ```python
-    >>> from transformers import T5Tokenizer, FlaxT5Model
-    >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    >>> from transformers import AutoTokenizer, FlaxT5Model
+    >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
     >>> model = FlaxT5Model.from_pretrained("t5-small")
     >>> input_ids = tokenizer(
     ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
@@ -1752,9 +1759,9 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
         Returns:
         Example:
         ```python
-        >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxT5ForConditionalGeneration
         >>> import jax.numpy as jnp
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
         >>> text = "summarize: My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, return_tensors="np")
@@ -1907,8 +1914,8 @@ FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING = """
     Returns:
     Example:
     ```python
-    >>> from transformers import T5Tokenizer, FlaxT5ForConditionalGeneration
-    >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    >>> from transformers import AutoTokenizer, FlaxT5ForConditionalGeneration
+    >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
     >>> model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small")
     >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors="np")
