@@ -3,7 +3,6 @@ from functools import cached_property, partial
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import datasets
-import flax.linen as nn
 import jax
 import jax.experimental.multihost_utils as multihost_utils
 import jax.numpy as jnp
@@ -13,6 +12,8 @@ from chex import Array, Scalar
 from jax.experimental import global_device_array as gda_lib
 from jax.experimental.global_device_array import Device
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
+
+import flax.linen as nn
 
 P = PartitionSpec
 Pytree = Any
@@ -139,9 +140,9 @@ def preprocess_seq2seq(
             output["attention_mask"].append(mask)
             if decoder_input_ids_column_name:
                 if decoder_trunc_end:
-                    new_tokens = examples["decoder_input_ids"][i][:max_len]
+                    new_tokens = examples["decoder_input_ids"][i][:decoder_max_len]
                 else:
-                    new_tokens = examples["decoder_input_ids"][i][-max_len:]
+                    new_tokens = examples["decoder_input_ids"][i][-decoder_max_len:]
                 padded, mask = pad_sequence(
                     new_tokens, decoder_max_len, pad_value, pad_right
                 )
@@ -344,6 +345,8 @@ class PerHostDataset:
         tokenize_batch_size: int,
         group_batch_size: int,
         mode: str = "seq2seq",
+        dataset_name: Optional[str] = None,
+        dataset_split: Optional[str] = None,
         decoder_input_ids_column_name: Optional[str] = None,
         block_size: Optional[int] = None,
         pad_value: Optional[int] = None,
@@ -392,7 +395,7 @@ class PerHostDataset:
         print("Local data shard index: ", local_data_shard_index)
 
         if isinstance(dataset, str):
-            dataset = datasets.load_dataset(dataset)
+            dataset = datasets.load_dataset(dataset, dataset_name, split=dataset_split)
 
         if mode == "seq2seq":
             preprocess_fn = partial(

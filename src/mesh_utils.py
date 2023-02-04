@@ -15,13 +15,13 @@
 import typing
 from typing import Optional, Sequence, Tuple, Union
 
-import flax.linen as nn
 import jax
 import numpy as np
+import partitioning_utils
 from jax.experimental.mesh_utils import create_hybrid_device_mesh
 from jax.sharding import Mesh
 
-import partitioning_utils
+import flax.linen as nn
 
 JaxDevice = jax.lib.xla_client.Device
 TpuMesh = Tuple[int, int, int, int]  # (x, y, z, num_cores).

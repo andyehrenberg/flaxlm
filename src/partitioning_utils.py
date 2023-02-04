@@ -1,11 +1,12 @@
 from typing import Any, List, Optional, Tuple
 
-import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.experimental.maps import Mesh
 from jax.sharding import Mesh, NamedSharding
+
+import flax.linen as nn
 
 
 def shard_logically_partitioned_params(params, mesh):

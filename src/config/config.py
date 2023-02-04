@@ -1,9 +1,7 @@
 import ml_collections as mlc
-from jax.sharding import PartitionSpec
 
-P = PartitionSpec
-
-from ..transformers_patch import FlaxGPTJForCausalLM, FlaxT5ForConditionalGeneration
+from ..transformers_patch import (FlaxGPTJForCausalLM,
+                                  FlaxT5ForConditionalGeneration)
 
 
 class Config(mlc.ConfigDict):
@@ -51,10 +49,6 @@ class Config(mlc.ConfigDict):
 
         data_args = mlc.ConfigDict()
 
-        data_args.data_axes = {
-            "input_ids": P("batch"),
-            "attention_mask": P("batch"),
-        }
         data_args.num_workers = 16
         data_args.tokenize_batch_size = 32
         data_args.group_batch_size = 32
@@ -64,20 +58,20 @@ class Config(mlc.ConfigDict):
         data_args.max_len = 1024
         data_args.trunc_end = True
         data_args.decoder_max_len = 1024
-        data_args.decoder_trunc_end = 1024
+        data_args.decoder_trunc_end = True
         data_args.train = dict(
-            global_data_shape={  # create in train script when has access to device info
-                "input_ids": jax.ShapeDtypeStruct(),
-                "attention_mask": jax.ShapeDtypeStruct(),
-            },
             input_ids_column_name="text",
             remove_columns=["id", "text"],
             decoder_input_ids_column_name=None,
+            dataset="oscar",
+            dataset_name="unshuffled_deduplicated_no",
+            dataset_split="train",
         )
         data_args.eval = dict(
-            # create in train script
-            global_data_shape={},
             input_ids_column_name="text",
             remove_columns=["id", "text"],
             decoder_input_ids_column_name=None,
+            dataset="oscar",
+            dataset_name="unshuffled_deduplicated_no",
+            dataset_split="test",
         )

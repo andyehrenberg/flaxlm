@@ -1,17 +1,17 @@
 from functools import partial
 from typing import Callable, Dict, Tuple, Type
 
-import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import optax
-from chex import Array, Scalar
-from flax.core.frozen_dict import FrozenDict
-from jax.sharding import Mesh, PartitionSpec
-
 import src.partitioning_utils as partitioning_utils
 import src.utils as utils
+from chex import Array, Scalar
+from jax.sharding import Mesh, PartitionSpec
+
+import flax.linen as nn
+from flax.core.frozen_dict import FrozenDict
 
 P = PartitionSpec
 

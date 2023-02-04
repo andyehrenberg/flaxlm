@@ -18,39 +18,30 @@
 import copy
 from typing import Callable, Optional, Tuple
 
-import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.random import PRNGKey
+from jax.sharding import PartitionSpec
+from src.transformers_patch.t5_config_remat import T5Config
+
+import flax.linen as nn
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
-from jax.random import PRNGKey
-from jax.sharding import PartitionSpec
 from transformers.modeling_flax_outputs import (
-    FlaxBaseModelOutput,
-    FlaxBaseModelOutputWithPastAndCrossAttentions,
-    FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSeq2SeqLMOutput,
-    FlaxSeq2SeqModelOutput,
-)
-from transformers.modeling_flax_utils import (
-    ACT2FN,
-    FlaxPreTrainedModel,
-    append_call_sample_docstring,
-    append_replace_return_docstrings,
-    overwrite_call_docstring,
-)
-from transformers.utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-
-from src.transformers_patch.t5_config_remat import T5Config
+    FlaxBaseModelOutput, FlaxBaseModelOutputWithPastAndCrossAttentions,
+    FlaxCausalLMOutputWithCrossAttentions, FlaxSeq2SeqLMOutput,
+    FlaxSeq2SeqModelOutput)
+from transformers.modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                              append_call_sample_docstring,
+                                              append_replace_return_docstrings,
+                                              overwrite_call_docstring)
+from transformers.utils import (add_start_docstrings,
+                                add_start_docstrings_to_model_forward, logging,
+                                replace_return_docstrings)
 
 P = PartitionSpec
 remat = nn_partitioning.remat

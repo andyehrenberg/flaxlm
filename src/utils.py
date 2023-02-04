@@ -2,17 +2,18 @@ import functools
 import os
 from typing import Any, Callable, Sequence, Union
 
-import flax
-import flax.core.frozen_dict as frozen_dict
-import flax.linen as nn
-import flax.serialization as serialization
-import flax.training.train_state as train_state
 import jax
 import jax.lax as lax
 import jax.numpy as jnp
 import ml_collections as mlc
 from chex import Array
 from jax.sharding import PartitionSpec
+
+import flax
+import flax.core.frozen_dict as frozen_dict
+import flax.linen as nn
+import flax.serialization as serialization
+import flax.training.train_state as train_state
 
 P = PartitionSpec
 
@@ -192,3 +193,77 @@ def save_params(params: frozen_dict.FrozenDict, directory: str):
     with open(f"{directory}/params", "wb") as f:
         state_bytes = serialization.to_bytes(params)
         f.write(state_bytes)
+
+
+def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
+    if data_args.mode == "clm":
+        block_size = data_args.block_size
+        train_global_data_shape = {
+            "input_ids": jax.ShapeDtypeStruct((train_batch_size, block_size), "i4"),
+            "attention_mask": jax.ShapeDtypeStruct(
+                (train_batch_size, block_size), "i4"
+            ),
+        }
+        eval_global_data_shape = {
+            "input_ids": jax.ShapeDtypeStruct((eval_batch_size, block_size), "i4"),
+            "attention_mask": jax.ShapeDtypeStruct((eval_batch_size, block_size), "i4"),
+        }
+        axes = {
+            "input_ids": P("batch"),
+            "attention_mask": P("batch"),
+        }
+    elif data_args.mode == "seq2seq":
+        input_ids_len = data_args.max_len
+        if data_args.train.decoder_input_ids_column_name:
+            decoder_ids_len = data_args.decoder_max_len
+            train_global_data_shape = {
+                "input_ids": jax.ShapeDtypeStruct((train_batch_size, input_ids_len)),
+                "attention_mask": jax.ShapeDtypeStruct(
+                    (train_batch_size, input_ids_len)
+                ),
+                "decoder_input_ids": jax.ShapeDtypeStruct(
+                    (train_batch_size, decoder_ids_len)
+                ),
+                "decoder_attention_mask": jax.ShapeDtypeStruct(
+                    (train_batch_size, decoder_ids_len)
+                ),
+            }
+            eval_global_data_shape = {
+                "input_ids": jax.ShapeDtypeStruct((eval_batch_size, input_ids_len)),
+                "attention_mask": jax.ShapeDtypeStruct(
+                    (eval_batch_size, input_ids_len)
+                ),
+                "decoder_input_ids": jax.ShapeDtypeStruct(
+                    (eval_batch_size, decoder_ids_len)
+                ),
+                "decoder_attention_mask": jax.ShapeDtypeStruct(
+                    (eval_batch_size, decoder_ids_len)
+                ),
+            }
+            axes = {
+                "input_ids": P("batch"),
+                "attention_mask": P("batch"),
+                "decoder_input_ids": P("batch"),
+                "decoder_attention_mask": P("batch"),
+            }
+        else:
+            train_global_data_shape = {
+                "input_ids": jax.ShapeDtypeStruct((train_batch_size, input_ids_len)),
+                "attention_mask": jax.ShapeDtypeStruct(
+                    (train_batch_size, input_ids_len)
+                ),
+            }
+            eval_global_data_shape = {
+                "input_ids": jax.ShapeDtypeStruct((eval_batch_size, input_ids_len)),
+                "attention_mask": jax.ShapeDtypeStruct(
+                    (eval_batch_size, input_ids_len)
+                ),
+            }
+            axes = {
+                "input_ids": P("batch"),
+                "attention_mask": P("batch"),
+            }
+    else:
+        raise NotImplementedError("Mode can either be seq2seq or clm")
+
+    return train_global_data_shape, eval_global_data_shape, axes

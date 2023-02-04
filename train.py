@@ -1,17 +1,17 @@
 import json
-from absl import app, flags
 
 import jax
-import ml_collections
-import transformers
-import datasets
 import jax.numpy as jnp
 import jax.random as jrandom
-
-import src.trainer as flax_trainer
-import src.utils as utils
+import ml_collections
 import src.data as data
 import src.mesh_utils as mesh_utils
+import src.partitioning_utils as partitioning_utils
+import src.trainer as flax_trainer
+import src.utils as utils
+from absl import app, flags
+
+import transformers
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -34,7 +34,7 @@ def train(_):
     tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_path)
 
     if tokenizer.pad_token_id is None:
-        tokenizer.add_special_tokens({'pad_token': '<|pad|>'})
+        tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
     rng = jrandom.PRNGKey(config.trainer_args.seed)
@@ -43,14 +43,27 @@ def train(_):
         config.trainer_args.parallelism_args
     )
 
-    train_dataset = datasets.load_dataset("oscar", "unshuffled_deduplicated_no", split="train")
-    eval_dataset = datasets.load_dataset("oscar", "unshuffled_deduplicated_no", split="test")
+    _, batch_size, _, _ = partitioning_utils.convert_per_device_batch_size(
+        config.trainer_args.sampling_args.per_device_batch_size,
+        config.trainer_args.parallelism_args.mp_num,
+        config.trainer_args.sampling_args.gradient_accumulation_steps,
+    )
+
+    _, eval_batch_size, _, _ = partitioning_utils.convert_per_device_batch_size(
+        config.trainer_args.eval_args.per_device_eval_batch_size,
+        config.trainer_args.parallelism_args.mp_num,
+        1,
+    )
+
+    train_shapes, eval_shapes, data_axes = utils.get_global_shape_dtypes(
+        batch_size, eval_batch_size, config.data_args
+    )
 
     train_dataset = data.PerHostDataset(
-        dataset=train_dataset,
-        global_data_shape=config.data_args.train.global_data_shape,
+        dataset=config.data_args.train.dataset,
+        global_data_shape=train_shapes,
         global_mesh=trainer.mesh,
-        data_axes=config.data_args.data_axes,
+        data_axes=data_axes,
         tokenizer=tokenizer,
         input_ids_columns_name=config.data_args.train.input_ids_column_name,
         remove_columns=config.data_args.train.remove_columns,
@@ -66,13 +79,15 @@ def train(_):
         trunc_end=config.data_args.trunc_end,
         decoder_max_len=config.data_args.decoder_max_len,
         decoder_trunc_end=config.data_args.decoder_trunc_end,
+        dataset_name=config.data_args.train.dataset_name,
+        dataset_split=config.data_args.train.dataset_split,
     )
 
     eval_dataset = data.PerHostDataset(
-        dataset=eval_dataset,
-        global_data_shape=config.data_args.eval.global_data_shape,
+        dataset=config.data_args.eval.dataset,
+        global_data_shape=eval_shapes,
         global_mesh=trainer.mesh,
-        data_axes=config.data_args.data_axes,
+        data_axes=data_axes,
         tokenizer=tokenizer,
         input_ids_columns_name=config.data_args.eval.input_ids_column_name,
         remove_columns=config.data_args.eval.remove_columns,
@@ -88,6 +103,8 @@ def train(_):
         trunc_end=config.data_args.trunc_end,
         decoder_max_len=config.data_args.decoder_max_len,
         decoder_trunc_end=config.data_args.decoder_trunc_end,
+        dataset_name=config.data_args.eval.dataset_name,
+        dataset_split=config.data_args.eval.dataset_split,
     )
 
     steps_per_epoch = train_dataset._global_min_length
