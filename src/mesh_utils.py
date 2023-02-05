@@ -17,11 +17,11 @@ from typing import Optional, Sequence, Tuple, Union
 
 import jax
 import numpy as np
-import partitioning_utils
 from jax.experimental.mesh_utils import create_hybrid_device_mesh
 from jax.sharding import Mesh
-
 import flax.linen as nn
+
+import src.partitioning_utils as partitioning_utils
 
 JaxDevice = jax.lib.xla_client.Device
 TpuMesh = Tuple[int, int, int, int]  # (x, y, z, num_cores).
@@ -40,7 +40,7 @@ def bounds_from_last_device(last_device: jax.lib.xla_client.Device) -> HardwareM
     else:
         # On non-TPU platforms, the "mesh" is hosts x devices per host in order
         # to take advantage of faster within-host interconnect.
-        return jax.host_count(), jax.local_device_count()
+        return jax.process_count(), jax.local_device_count()
 
 
 def get_coords(device: jax.lib.xla_client.Device) -> HardwareMesh:
@@ -231,6 +231,16 @@ def get_gpu_mesh(num_partitions: int):
     return global_mesh
 
 
+def get_cpu_mesh(num_partitions: int) -> Mesh:
+    """Trivial mesh for CPU Testing."""
+    return Mesh(
+        np.array(jax.devices()).reshape(
+            jax.device_count() // num_partitions, num_partitions
+        ),
+        ["data", "model"],
+    )
+
+
 def default_mesh(
     num_partitions: int,
     model_parallel_submesh: Optional[HardwareMesh] = None,
@@ -257,6 +267,8 @@ def default_mesh(
         return get_mesh(model_parallel_submesh, backend=backend)
     elif platform == "gpu":
         return get_gpu_mesh(num_partitions)
+    elif platform == "cpu":
+        return get_cpu_mesh(num_partitions)
 
     mps = None
     if device_kind in ("TPU v2", "TPU v3"):

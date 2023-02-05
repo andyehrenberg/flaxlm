@@ -217,27 +217,31 @@ def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
         if data_args.train.decoder_input_ids_column_name:
             decoder_ids_len = data_args.decoder_max_len
             train_global_data_shape = {
-                "input_ids": jax.ShapeDtypeStruct((train_batch_size, input_ids_len)),
+                "input_ids": jax.ShapeDtypeStruct(
+                    (train_batch_size, input_ids_len), "i4"
+                ),
                 "attention_mask": jax.ShapeDtypeStruct(
-                    (train_batch_size, input_ids_len)
+                    (train_batch_size, input_ids_len), "i4"
                 ),
                 "decoder_input_ids": jax.ShapeDtypeStruct(
-                    (train_batch_size, decoder_ids_len)
+                    (train_batch_size, decoder_ids_len), "i4"
                 ),
                 "decoder_attention_mask": jax.ShapeDtypeStruct(
-                    (train_batch_size, decoder_ids_len)
+                    (train_batch_size, decoder_ids_len), "i4"
                 ),
             }
             eval_global_data_shape = {
-                "input_ids": jax.ShapeDtypeStruct((eval_batch_size, input_ids_len)),
+                "input_ids": jax.ShapeDtypeStruct(
+                    (eval_batch_size, input_ids_len), "i4"
+                ),
                 "attention_mask": jax.ShapeDtypeStruct(
-                    (eval_batch_size, input_ids_len)
+                    (eval_batch_size, input_ids_len), "i4"
                 ),
                 "decoder_input_ids": jax.ShapeDtypeStruct(
-                    (eval_batch_size, decoder_ids_len)
+                    (eval_batch_size, decoder_ids_len), "i4"
                 ),
                 "decoder_attention_mask": jax.ShapeDtypeStruct(
-                    (eval_batch_size, decoder_ids_len)
+                    (eval_batch_size, decoder_ids_len), "i4"
                 ),
             }
             axes = {
@@ -248,15 +252,19 @@ def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
             }
         else:
             train_global_data_shape = {
-                "input_ids": jax.ShapeDtypeStruct((train_batch_size, input_ids_len)),
+                "input_ids": jax.ShapeDtypeStruct(
+                    (train_batch_size, input_ids_len), "i4"
+                ),
                 "attention_mask": jax.ShapeDtypeStruct(
-                    (train_batch_size, input_ids_len)
+                    (train_batch_size, input_ids_len), "i4"
                 ),
             }
             eval_global_data_shape = {
-                "input_ids": jax.ShapeDtypeStruct((eval_batch_size, input_ids_len)),
+                "input_ids": jax.ShapeDtypeStruct(
+                    (eval_batch_size, input_ids_len), "i4"
+                ),
                 "attention_mask": jax.ShapeDtypeStruct(
-                    (eval_batch_size, input_ids_len)
+                    (eval_batch_size, input_ids_len), "i4"
                 ),
             }
             axes = {

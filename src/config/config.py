@@ -1,7 +1,6 @@
 import ml_collections as mlc
 
-from ..transformers_patch import (FlaxGPTJForCausalLM,
-                                  FlaxT5ForConditionalGeneration)
+from ..transformers_patch import FlaxGPTJForCausalLM, FlaxT5ForConditionalGeneration
 
 
 class Config(mlc.ConfigDict):
@@ -19,6 +18,9 @@ class Config(mlc.ConfigDict):
         self.experiment = experiment
 
         trainer_args = mlc.ConfigDict()
+        trainer_args.seed = 32
+        trainer_args.save = False
+        trainer_args.output_dir = ""
         trainer_args.sampling_args = dict(
             num_epochs=1,
             per_device_batch_size=2,
@@ -46,6 +48,7 @@ class Config(mlc.ConfigDict):
             per_device_eval_batch_size=2,
             max_generation_new_tokens=256,
         )
+        self.trainer_args = trainer_args
 
         data_args = mlc.ConfigDict()
 
@@ -75,3 +78,5 @@ class Config(mlc.ConfigDict):
             dataset_name="unshuffled_deduplicated_no",
             dataset_split="test",
         )
+
+        self.data_args = data_args

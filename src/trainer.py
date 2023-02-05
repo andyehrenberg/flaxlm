@@ -214,6 +214,20 @@ class Trainer:
             params, self.mesh
         )
 
+        def create_fn(dropout_rng, params):
+            return utils.TrainState.create(
+                apply_fn=model.__call__,
+                eval_apply_fn=eval_model.__call__,
+                generate_fn=eval_model.generate,
+                params=params,
+                tx=tx,
+                dynamic_scale=dynamic_scale,
+                dropout_rng=dropout_rng,
+            )
+
+        train_state_shape = jax.eval_shape(create_fn, dropout_rng, params)
+        self.train_state_spec = nn.get_partition_spec(train_state_shape)
+
         @self.with_mesh
         @jax.jit
         def create_fn(dropout_rng, params):
@@ -226,13 +240,13 @@ class Trainer:
                 dynamic_scale=dynamic_scale,
                 dropout_rng=dropout_rng,
             )
-            train_state_spec = nn.get_partition_spec(train_state)
-            train_state = nn.with_logical_constraint(train_state, train_state_spec)
+            train_state = jax.lax.with_sharding_constraint(
+                train_state, self.train_state_spec
+            )
 
             return train_state
 
         self.train_state = create_fn(dropout_rng, params)
-        self.train_state_spec = nn.get_partition_spec(self.train_state)
         self.param_spec = self.train_state_spec.params
 
     def make_train_step(self) -> Callable:

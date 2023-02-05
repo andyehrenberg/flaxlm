@@ -1,15 +1,16 @@
+from absl import app, flags
 import json
 
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
-import ml_collections
+import ml_collections as mlc
+
 import src.data as data
 import src.mesh_utils as mesh_utils
 import src.partitioning_utils as partitioning_utils
 import src.trainer as flax_trainer
 import src.utils as utils
-from absl import app, flags
 
 import transformers
 
@@ -23,7 +24,7 @@ flags.DEFINE_string(
 
 def train(_):
     with open(FLAGS.json_config_path, "rt") as fd:
-        config = ml_collections.ConfigDict(json.load(fd))
+        config = mlc.ConfigDict(json.load(fd))
 
     num_epochs = config.trainer_args.sampling_args.num_epochs
     save = config.trainer_args.save

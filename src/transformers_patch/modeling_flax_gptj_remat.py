@@ -29,12 +29,17 @@ from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
-from transformers.modeling_flax_outputs import (FlaxBaseModelOutput,
-                                                FlaxCausalLMOutput)
-from transformers.modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
-                                              append_call_sample_docstring)
-from transformers.utils import (add_start_docstrings,
-                                add_start_docstrings_to_model_forward, logging)
+from transformers.modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
+from transformers.modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_call_sample_docstring,
+)
+from transformers.utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 
 P = PartitionSpec
 remat = nn_partitioning.remat
@@ -845,7 +850,6 @@ class FlaxGPTJForCausalLM(FlaxGPTJPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxGPTJForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutput,
     _CONFIG_FOR_DOC,
