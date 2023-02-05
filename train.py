@@ -63,7 +63,7 @@ def train(_):
     train_dataset = data.PerHostDataset(
         dataset=config.data_args.train.dataset,
         global_data_shape=train_shapes,
-        global_mesh=trainer.mesh,
+        global_mesh=mesh,
         data_axes=data_axes,
         tokenizer=tokenizer,
         input_ids_columns_name=config.data_args.train.input_ids_column_name,
@@ -87,7 +87,7 @@ def train(_):
     eval_dataset = data.PerHostDataset(
         dataset=config.data_args.eval.dataset,
         global_data_shape=eval_shapes,
-        global_mesh=trainer.mesh,
+        global_mesh=mesh,
         data_axes=data_axes,
         tokenizer=tokenizer,
         input_ids_columns_name=config.data_args.eval.input_ids_column_name,
