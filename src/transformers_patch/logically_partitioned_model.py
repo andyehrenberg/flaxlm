@@ -291,7 +291,6 @@ class LogicallyPartitionedModel(transformers.FlaxPreTrainedModel):
                 model, resolved_archive_file, is_sharded
             )
         else:
-
             if is_sharded:
                 state = cls.load_flax_sharded_weights(resolved_archive_file)
             else:
@@ -379,6 +378,9 @@ class LogicallyPartitionedModel(transformers.FlaxPreTrainedModel):
                         "Using `ignore_mismatched_sizes=True` if you really want to load this checkpoint inside this "
                         "model."
                     )
+            state[key] = nn.LogicallyPartitioned(
+                value=state[key], names=random_state[key].names
+            )
 
         # add missing keys as random parameters if we are initializing
         if missing_keys and _do_init:
