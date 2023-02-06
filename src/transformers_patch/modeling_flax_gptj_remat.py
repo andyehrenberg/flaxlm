@@ -21,7 +21,6 @@ import jax.numpy as jnp
 import numpy as np
 from jax import lax
 from jax.sharding import PartitionSpec
-from src.transformers_patch.gptj_config_remat import GPTJConfig
 
 import flax.linen as nn
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
@@ -32,7 +31,6 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from transformers.modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
 from transformers.modeling_flax_utils import (
     ACT2FN,
-    FlaxPreTrainedModel,
     append_call_sample_docstring,
 )
 from transformers.utils import (
@@ -40,6 +38,9 @@ from transformers.utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+
+from src.transformers_patch.gptj_config_remat import GPTJConfig
+from src.transformers_patch.logically_partitioned_model import LogicallyPartitionedModel
 
 P = PartitionSpec
 remat = nn_partitioning.remat
@@ -51,7 +52,7 @@ _CONFIG_FOR_DOC = "GPTJConfig"
 
 
 GPTJ_START_DOCSTRING = r"""
-    This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    This model inherits from [`LogicallyPartitionedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
     This model is also a Flax Linen
@@ -65,7 +66,7 @@ GPTJ_START_DOCSTRING = r"""
     Parameters:
         config ([`GPTJConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+            configuration. Check out the [`~LogicallyPartitionedModel.from_pretrained`] method to load the model weights.
         dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
             The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
             `jax.numpy.bfloat16` (on TPUs).
@@ -73,8 +74,8 @@ GPTJ_START_DOCSTRING = r"""
             specified all the computation will be performed with the given `dtype`.
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
-            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
-            [`~FlaxPreTrainedModel.to_bf16`].
+            If you wish to change the dtype of the model parameters, see [`~LogicallyPartitionedModel.to_fp16`] and
+            [`~LogicallyPartitionedModel.to_bf16`].
 """
 
 GPTJ_INPUTS_DOCSTRING = r"""
@@ -430,7 +431,7 @@ class FlaxGPTJBlock(nn.Module):
         return (hidden_states,) + attn_outputs[1:]
 
 
-class FlaxGPTJPreTrainedModel(FlaxPreTrainedModel):
+class FlaxGPTJPreTrainedModel(LogicallyPartitionedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.

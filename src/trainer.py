@@ -240,9 +240,7 @@ class Trainer:
                 dynamic_scale=dynamic_scale,
                 dropout_rng=dropout_rng,
             )
-            train_state = jax.lax.with_sharding_constraint(
-                train_state, self.train_state_spec
-            )
+            train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
 
             return train_state
 

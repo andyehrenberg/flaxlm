@@ -31,6 +31,7 @@ class Config(mlc.ConfigDict):
             warmup_steps=100,
             max_grad_norm=1.0,
             use_dropout=True,
+            half_precision=False,
         )
         trainer_args.parallelism_args = dict(
             mp_num=2,

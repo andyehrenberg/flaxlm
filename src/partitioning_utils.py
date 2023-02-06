@@ -44,7 +44,6 @@ def make_param_partitionable(param, mp_num, dim):
 def make_partitioning_rules(
     activation_partitioning_dims,
     parameter_partitioning_dims,
-    mp_num=None,
 ):
     """Gives default sharding rules in terms of logical axis names.
 

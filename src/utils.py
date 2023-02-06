@@ -146,22 +146,24 @@ def setup_model(
 
         if mp_num > 1:
             remainder = original_vocab % mp_num
-            config.vocab_size = original_vocab + mp_num - remainder
+            if remainder != 0:
+                # deal with gpt2 vocab
+                config.vocab_size = original_vocab + mp_num - remainder
 
-            # expand embedding to be able to be partitioned
-            emb = jnp.zeros((config.vocab_size, model.config.hidden_size))
-            emb = emb.at[:original_vocab, :].set(
-                model.params["model"]["decoder"]["embed_tokens"]["embedding"].value
-            )
+                # expand embedding to be able to be partitioned
+                emb = jnp.zeros((config.vocab_size, model.config.hidden_size))
+                emb = emb.at[:original_vocab, :].set(
+                    model.params["model"]["decoder"]["embed_tokens"]["embedding"].value
+                )
 
-            params["model"]["decoder"]["embed_tokens"][
-                "embedding"
-            ] = nn.LogicallyPartitioned(
-                value=emb,
-                names=model.params["model"]["decoder"]["embed_tokens"][
+                params["model"]["decoder"]["embed_tokens"][
                     "embedding"
-                ].names,
-            )
+                ] = nn.LogicallyPartitioned(
+                    value=emb,
+                    names=model.params["model"]["decoder"]["embed_tokens"][
+                        "embedding"
+                    ].names,
+                )
 
         model = model_cls(config, _do_init=False, dtype=dtype)
         eval_model = (
@@ -209,8 +211,12 @@ def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
             "attention_mask": jax.ShapeDtypeStruct((eval_batch_size, block_size), "i4"),
         }
         axes = {
-            "input_ids": P("batch"),
-            "attention_mask": P("batch"),
+            "input_ids": P(
+                "batch",
+            ),
+            "attention_mask": P(
+                "batch",
+            ),
         }
     elif data_args.mode == "seq2seq":
         input_ids_len = data_args.max_len
@@ -245,10 +251,18 @@ def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
                 ),
             }
             axes = {
-                "input_ids": P("batch"),
-                "attention_mask": P("batch"),
-                "decoder_input_ids": P("batch"),
-                "decoder_attention_mask": P("batch"),
+                "input_ids": P(
+                    "batch",
+                ),
+                "attention_mask": P(
+                    "batch",
+                ),
+                "decoder_input_ids": P(
+                    "batch",
+                ),
+                "decoder_attention_mask": P(
+                    "batch",
+                ),
             }
         else:
             train_global_data_shape = {
@@ -268,8 +282,12 @@ def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
                 ),
             }
             axes = {
-                "input_ids": P("batch"),
-                "attention_mask": P("batch"),
+                "input_ids": P(
+                    "batch",
+                ),
+                "attention_mask": P(
+                    "batch",
+                ),
             }
     else:
         raise NotImplementedError("Mode can either be seq2seq or clm")

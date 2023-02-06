@@ -322,7 +322,6 @@ def setup_mesh_and_partitioning_rules(parallelism_args):
     rules = partitioning_utils.make_partitioning_rules(
         parallelism_args.activation_partitioning_dims,
         parallelism_args.parameter_partitioning_dims,
-        parallelism_args.mp_num,
     )
     nn.set_logical_axis_rules(rules)
 

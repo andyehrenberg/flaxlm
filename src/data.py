@@ -304,7 +304,7 @@ def get_next_per_host(
     host_local_indices: Dict[Device, slice],
     global_data_shape: Pytree,
     global_mesh: Mesh,
-    data_axes: P,
+    data_axes: Tuple,
 ) -> Array:
     local_data = next(dataloader)
 
@@ -322,10 +322,10 @@ def get_next_per_host(
         )
         return global_array
 
-    mesh_data_axes = nn.logical_to_mesh_axes(data_axes)
+    # mesh_data_axes = nn.logical_to_mesh_axes(data_axes)
 
     global_arrays = jax.tree_map(
-        form_global_array, local_data, global_data_shape, mesh_data_axes
+        form_global_array, local_data, global_data_shape, data_axes
     )
 
     return global_arrays
@@ -358,7 +358,7 @@ class PerHostDataset:
     ):
         self.global_data_shape = global_data_shape
         self.global_mesh = global_mesh
-        self.data_axes = data_axes
+        self.data_axes = nn.logical_to_mesh(data_axes)
 
         device_to_index = jax.tree_map(
             lambda shape, axes: gda_lib.get_shard_indices(
