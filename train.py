@@ -2,7 +2,6 @@ from absl import app, flags
 import json
 
 import jax
-import jax.numpy as jnp
 import jax.random as jrandom
 import ml_collections as mlc
 
@@ -82,6 +81,7 @@ def train(_):
         decoder_trunc_end=config.data_args.decoder_trunc_end,
         dataset_name=config.data_args.train.dataset_name,
         dataset_split=config.data_args.train.dataset_split,
+        decoder_prefix_str=config.data_args.decoder_prefix_str,
     )
 
     eval_dataset = data.PerHostDataset(
@@ -106,6 +106,7 @@ def train(_):
         decoder_trunc_end=config.data_args.decoder_trunc_end,
         dataset_name=config.data_args.eval.dataset_name,
         dataset_split=config.data_args.eval.dataset_split,
+        decoder_prefix_str=config.data_args.decoder_prefix_str,
     )
 
     steps_per_epoch = train_dataset._global_min_length

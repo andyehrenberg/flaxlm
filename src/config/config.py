@@ -63,6 +63,7 @@ class Config(mlc.ConfigDict):
         data_args.trunc_end = True
         data_args.decoder_max_len = 1024
         data_args.decoder_trunc_end = True
+        data_args.decoder_prefix_str = "summarize: "
         data_args.train = dict(
             input_ids_column_name="text",
             remove_columns=["id", "text"],

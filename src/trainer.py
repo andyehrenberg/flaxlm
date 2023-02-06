@@ -407,25 +407,18 @@ class Trainer:
             train_state: utils.TrainState,
             input_ids: Array,
             attention_mask: Array,
-            decoder_input_ids: Array,
-            decoder_attention_mask: Array,
             **kwargs
         ):
             train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
-            (
-                input_ids,
-                attention_mask,
-                decoder_input_ids,
-                decoder_attention_mask,
-            ) = jax.tree_util.tree_map(
+
+            input_ids, attention_mask = jax.tree_util.tree_map(
                 lambda x: nn.with_logical_constraint(x, self.batch_spec),
-                (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask),
+                (input_ids, attention_mask),
             )
+
             sequences = train_state.generate_fn(
                 input_ids,
                 attention_mask=attention_mask,
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=decoder_attention_mask,
                 params=train_state.params,
                 **kwargs,
             ).sequences

@@ -100,7 +100,19 @@ def preprocess_seq2seq(
     decoder_trunc_end: bool = True,
     decoder_input_ids_column_name: Optional[str] = None,
     remove_columns: Optional[List[str]] = None,
+    decoder_prefix_str: Optional[str] = None,
 ):
+    if decoder_prefix_str:
+
+        def add_prefix(example):
+            example[input_ids_column_name] = (
+                decoder_prefix_str + example[input_ids_column_name]
+            )
+
+            return example
+
+        dataset = dataset.map(add_prefix, batched=False, num_proc=num_workers)
+
     remove_columns = (
         remove_columns + [input_ids_column_name]
         if remove_columns
@@ -355,6 +367,7 @@ class PerHostDataset:
         trunc_end: Optional[bool] = None,
         decoder_max_len: Optional[int] = None,
         decoder_trunc_end: bool = True,
+        decoder_prefix_str: Optional[str] = None,
     ):
         self.global_data_shape = global_data_shape
         self.global_mesh = global_mesh
@@ -406,6 +419,7 @@ class PerHostDataset:
                 trunc_end=trunc_end,
                 decoder_max_len=decoder_max_len,
                 decoder_trunc_end=decoder_trunc_end,
+                decoder_prefix_str=decoder_prefix_str,
             )
         elif mode == "clm":
             preprocess_fn = partial(
