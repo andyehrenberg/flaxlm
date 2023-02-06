@@ -39,9 +39,9 @@ class Config(mlc.ConfigDict):
             parameter_partitioning_dims=1,
         )
         trainer_args.model_args = dict(
-            model_cls=FlaxGPTJForCausalLM,
-            pretrained_model_name_or_path="EleutherAI/gpt-j-6b",
-            tokenizer_path="EleutherAI/gpt-j-6b",
+            model_cls=FlaxT5ForConditionalGeneration,
+            pretrained_model_name_or_path="google/flan-t5-base",
+            tokenizer_path="google/flan-t5-base",
             from_pt=False,
             gradient_checkpointing=True,
         )
@@ -56,7 +56,7 @@ class Config(mlc.ConfigDict):
         data_args.num_workers = 16
         data_args.tokenize_batch_size = 32
         data_args.group_batch_size = 32
-        data_args.mode = "clm"
+        data_args.mode = "seq2seq"
         data_args.block_size = 1024
         data_args.pad_right = True
         data_args.max_len = 1024
@@ -65,20 +65,20 @@ class Config(mlc.ConfigDict):
         data_args.decoder_trunc_end = True
         data_args.decoder_prefix_str = "summarize: "
         data_args.train = dict(
-            input_ids_column_name="text",
-            remove_columns=["id", "text"],
-            decoder_input_ids_column_name=None,
-            dataset="oscar",
-            dataset_name="unshuffled_deduplicated_no",
+            input_ids_column_name="article",
+            remove_columns=["id"],
+            decoder_input_ids_column_name="highlights",
+            dataset="cnn_dailymail",
+            dataset_name="1.0.0",
             dataset_split="train",
         )
         data_args.eval = dict(
-            input_ids_column_name="text",
-            remove_columns=["id", "text"],
-            decoder_input_ids_column_name=None,
-            dataset="oscar",
-            dataset_name="unshuffled_deduplicated_no",
-            dataset_split="test",
+            input_ids_column_name="article",
+            remove_columns=["id"],
+            decoder_input_ids_column_name="highlights",
+            dataset="cnn_dailymail",
+            dataset_name="1.0.0",
+            dataset_split="validation",
         )
 
         self.data_args = data_args
