@@ -31,6 +31,8 @@ def train(_):
     tokenizer_path = config.trainer_args.model_args.tokenizer_path
     model_cls = config.trainer_args.model_args.model_cls
 
+    utils.init_logging(config)
+
     tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_path)
 
     if tokenizer.pad_token_id is None:
@@ -120,17 +122,16 @@ def train(_):
     num_steps = 0
 
     eval_metrics = run_eval(trainer, eval_dataset)
-    log_metrics(eval_metrics, num_steps)
+    utils.log_metrics(eval_metrics, num_steps)
 
     for epoch in range(num_epochs):
         key, rng = jrandom.split(rng)
         for batch in train_dataset.set_epoch(key):
             metrics = trainer.train_step(batch)
             num_steps += 1
-            if jax.process_index() == 0:
-                log_metrics(metrics, num_steps)
+            utils.log_metrics(metrics, num_steps)
         eval_metrics = run_eval(trainer, eval_dataset)
-        log_metrics(eval_metrics, num_steps)
+        utils.log_metrics(eval_metrics, num_steps)
 
     if jax.process_index() == 0:
         if save:

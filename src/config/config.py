@@ -82,3 +82,9 @@ class Config(mlc.ConfigDict):
         )
 
         self.data_args = data_args
+
+        self.logging_args = dict(
+            wandb_entity="",
+            wandb_project="",
+            wandb_job_type="",
+        )

@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import ml_collections as mlc
 from chex import Array
 from jax.sharding import PartitionSpec
+import wandb
 
 import flax
 import flax.core.frozen_dict as frozen_dict
@@ -297,3 +298,17 @@ def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
         raise NotImplementedError("Mode can either be seq2seq or clm")
 
     return train_global_data_shape, eval_global_data_shape, axes
+
+
+def init_logging(config):
+    if jax.process_index() == 0:
+        wandb.init(
+            entity=config.logging_args.wandb_entity,
+            project=config.logging_args.wandb_project,
+            job_type=config.logging_args.wandb_job_type,
+            config=config,
+        )
+
+def log_metrics(metrics, step):
+    if jax.process_index() == 0:
+        wandb.log(metrics, step=step)
