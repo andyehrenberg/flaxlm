@@ -14,3 +14,4 @@ https://github.com/Sea-Snell/JAXSeq (gradient checkpointing, working with huggin
 https://github.com/sholtodouglas/multihost_dataloading (multi-host dataloading strategies)
 https://github.com/google-research/t5x (construction of meshes for different platforms)
 https://github.com/borisdayma/dalle-mini (determining per-host and global batch sizes, train steps that efficiently support gradient accumulation, mp and dp)
+https://github.com/stanford-crfm/levanter (multihost utils, getting layout of devices)
