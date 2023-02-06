@@ -171,10 +171,14 @@ def setup_model(
             if dtype == jnp.float32
             else model_cls(config, _do_init=False, dtype=jnp.float32)
         )
-        model.config.suppress_tokens += list(range(original_vocab, config.vocab_size))
-        eval_model.config.suppress_tokens += list(
-            range(original_vocab, config.vocab_size)
-        )
+
+        if original_vocab != config.vocab_size:
+            model.config.suppress_tokens += list(
+                range(original_vocab, config.vocab_size)
+            )
+            eval_model.config.suppress_tokens += list(
+                range(original_vocab, config.vocab_size)
+            )
 
     return model, eval_model, params
 
