@@ -29,6 +29,7 @@ OtherMesh = Tuple[int, int]
 HardwareMesh = Union[TpuMesh, OtherMesh]
 
 
+# taken from https://github.com/google-research/t5x/blob/main/t5x/partitioning.py
 def bounds_from_last_device(last_device: jax.lib.xla_client.Device) -> HardwareMesh:
     """Get the bound from the given last device."""
     # Must be passed the device at the highest-coordinate corner of the
@@ -43,6 +44,7 @@ def bounds_from_last_device(last_device: jax.lib.xla_client.Device) -> HardwareM
         return jax.process_count(), jax.local_device_count()
 
 
+# taken from https://github.com/google-research/t5x/blob/main/t5x/partitioning.py
 def get_coords(device: jax.lib.xla_client.Device) -> HardwareMesh:
     """Returns the coordinates of the given device."""
     if hasattr(device, "coords"):
@@ -50,6 +52,7 @@ def get_coords(device: jax.lib.xla_client.Device) -> HardwareMesh:
     return (device.process_index, device.id % jax.local_device_count())
 
 
+# taken from https://github.com/google-research/t5x/blob/main/t5x/partitioning.py
 def get_mesh(
     model_parallel_submesh: HardwareMesh,
     input_devices: Sequence[JaxDevice] = (),
@@ -208,6 +211,7 @@ def get_mesh(
     return global_mesh
 
 
+# taken from https://github.com/google-research/t5x/blob/main/t5x/partitioning.py
 def get_gpu_mesh(num_partitions: int):
     nvlink_size = jax.local_device_count()
     dcn_size = jax.process_count()
@@ -231,6 +235,7 @@ def get_gpu_mesh(num_partitions: int):
     return global_mesh
 
 
+# taken from https://github.com/google-research/t5x/blob/main/t5x/partitioning.py
 def get_cpu_mesh(num_partitions: int) -> Mesh:
     """Trivial mesh for CPU Testing."""
     return Mesh(
@@ -241,6 +246,7 @@ def get_cpu_mesh(num_partitions: int) -> Mesh:
     )
 
 
+# taken from https://github.com/google-research/t5x/blob/main/t5x/partitioning.py
 def default_mesh(
     num_partitions: int,
     model_parallel_submesh: Optional[HardwareMesh] = None,

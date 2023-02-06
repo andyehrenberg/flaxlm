@@ -56,18 +56,6 @@ def data_loader(
             shape_dtypes,
             batch,
         )
-        # if "attention_mask" in batch.keys():
-        #    batch["position_ids"] = batch["attention_mask"].cumsum(-1) - 1
-        #    batch["position_ids"] = jnp.where(
-        #        batch["attention_mask"] > 0, batch["position_ids"], 0
-        #    )
-        # if "decoder_attention_mask" in batch.keys():
-        #    batch["decoder_position_ids"] = (
-        #        batch["decoder_attention_mask"].cumsum(-1) - 1
-        #    )
-        #    batch["decoder_position_ids"] = jnp.where(
-        #        batch["decoder_attention_mask"] > 0, batch["decoder_position_ids"], 0
-        #    )
 
         yield batch
 
@@ -229,6 +217,7 @@ def preprocess_clm(
     return data
 
 
+# largely taken from https://github.com/sholtodouglas/multihost_dataloading/blob/main/multihost_dataloading/dataloaders.py
 def check_inputs(dataset, global_data_shape, data_axes):
     dataset_structure = jax.tree_util.tree_structure(
         next(data_loader(dataset, 1, global_data_shape))
@@ -263,6 +252,7 @@ def check_inputs(dataset, global_data_shape, data_axes):
     return batch_dim
 
 
+# largely taken from https://github.com/sholtodouglas/multihost_dataloading/blob/main/multihost_dataloading/dataloaders.py
 def get_unique_shards(
     host_to_devices: Dict[int, List[Device]],
     device_to_index: Dict[Device, Tuple[slice, slice]],
@@ -286,6 +276,7 @@ def get_unique_shards(
     return host_to_dataset_shard, num_unique_shards
 
 
+# largely taken from https://github.com/sholtodouglas/multihost_dataloading/blob/main/multihost_dataloading/dataloaders.py
 def convert_global_indices_to_local_indices(
     device_to_index: Dict[Device, Tuple[slice, slice]]
 ) -> Tuple[Dict[Device, slice], int]:
@@ -311,6 +302,7 @@ def convert_global_indices_to_local_indices(
     return device_to_local_indices, host_batch_size
 
 
+# largely taken from https://github.com/sholtodouglas/multihost_dataloading/blob/main/multihost_dataloading/dataloaders.py
 def get_next_per_host(
     dataloader: Iterator,
     host_local_indices: Dict[Device, slice],

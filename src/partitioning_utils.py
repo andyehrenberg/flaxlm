@@ -122,6 +122,7 @@ def make_partitioning_rules(
     return rules
 
 
+# inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
 def convert_per_device_batch_size(per_device_batch_size, mp_num, grad_accum_steps=1):
     per_node_per_grad_step_batch_size = (
         per_device_batch_size * jax.local_device_count() // mp_num
@@ -142,6 +143,7 @@ def convert_per_device_batch_size(per_device_batch_size, mp_num, grad_accum_step
     )
 
 
+# taken from https://github.com/stanford-crfm/levanter/blob/main/src/levanter/mesh.py
 def local_device_grid_positions(
     mesh, process_index: Optional[int] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -152,6 +154,7 @@ def local_device_grid_positions(
     return my_device_pos.nonzero()
 
 
+# taken from https://github.com/stanford-crfm/levanter/blob/main/src/levanter/mesh.py
 def process_mesh_position(mesh, process_index: Optional[int] = None) -> Tuple[int, int]:
     """
     If we envision each process as a subgrid of the mesh for its devices, this is the position of the process
@@ -167,6 +170,7 @@ def process_mesh_position(mesh, process_index: Optional[int] = None) -> Tuple[in
     return pos[0], pos[1]
 
 
+# taken from https://github.com/stanford-crfm/levanter/blob/main/src/levanter/mesh.py
 def process_mesh_size(mesh: Mesh) -> Tuple[int, int]:
     """
     If we envision each process as a subgrid of the mesh for its devices, then there is a process grid that
@@ -182,6 +186,7 @@ def process_mesh_size(mesh: Mesh) -> Tuple[int, int]:
     )
 
 
+# inspired by https://github.com/Sea-Snell/JAXSeq/blob/main/src/shard.py
 def shard_data_list(data: List[Any], mesh: Mesh, dp_axis: int):
     dp_size = process_mesh_size(mesh)[dp_axis]
     dp_idx = process_mesh_position(mesh, jax.process_index())[dp_axis]

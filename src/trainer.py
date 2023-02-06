@@ -290,6 +290,7 @@ class Trainer:
 
             grad_fn = dynamic_scale.value_and_grad(compute_loss, has_aux=True)
 
+            # inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
             def loss_and_grad(grad_idx, dropout_rng):
                 minibatch = (
                     get_minibatch(batch, grad_idx) if grad_idx is not None else batch
@@ -329,6 +330,7 @@ class Trainer:
                     train_state.dropout_rng,
                 )
 
+                # inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
                 def cumul_minibatch_step(
                     grad_idx: Scalar, carry: Tuple[Scalar, FrozenDict, Scalar]
                 ) -> Tuple[Scalar, FrozenDict, Scalar]:
