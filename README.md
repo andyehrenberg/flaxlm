@@ -20,9 +20,13 @@ https://github.com/borisdayma/dalle-mini (determining per-host and global batch 
 
 https://github.com/stanford-crfm/levanter (multihost utils, getting layout of devices)
 
+Running on TPU:
+
 ```bash
 git clone https://github.com/andyehrenberg/tiny_t5x.git
 cd tiny_t5x
-pip install -e .
+python3 -m pip install -e ".[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 wandb login
+
+python3 tiny_t5x/train.py --config=tiny_t5x/src/config/config.py
 ```
