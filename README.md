@@ -19,3 +19,10 @@ https://github.com/google-research/t5x (construction of meshes for different pla
 https://github.com/borisdayma/dalle-mini (determining per-host and global batch sizes, train steps that efficiently support gradient accumulation, mp and dp)
 
 https://github.com/stanford-crfm/levanter (multihost utils, getting layout of devices)
+
+```bash
+git clone https://github.com/andyehrenberg/tiny_t5x.git
+cd tiny_t5x
+pip install -e .
+wandb login
+```
