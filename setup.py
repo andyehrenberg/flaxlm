@@ -14,7 +14,9 @@ with open('README.md') as fp:
 _jax_version = '0.4.2'
 
 with open("requirements.txt", "r") as f:
-    requirements = [line for line in f.readlines()]
+    requirements = [line for line in f.readlines() if line[0] != "#"]
+
+print(setuptools.find_packages())
 
 setuptools.setup(
     name='tiny_t5x',
@@ -33,7 +35,7 @@ setuptools.setup(
             'gevent',
             'google-api-python-client',
             'google-compute-engine',
-            'google-cloud-storage',
+            'google-cloud-storage==2.5.0',
             'oauth2client',
         ],
         # Cloud TPU requirements.
