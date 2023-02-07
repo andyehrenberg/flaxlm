@@ -3,7 +3,7 @@ import json
 
 import jax
 import jax.random as jrandom
-import ml_collections as mlc
+from ml_collections import config_flags
 
 import src.data as data
 import src.mesh_utils as mesh_utils
@@ -13,18 +13,9 @@ import src.utils as utils
 
 import transformers
 
-FLAGS = flags.FLAGS
-flags.DEFINE_string(
-    "json_config_path",
-    None,
-    "Path to the JSON serialized config for this training run.",
-)
-
+config = config_flags.DEFINE_config_file('config')
 
 def train(_):
-    with open(FLAGS.json_config_path, "rt") as fd:
-        config = mlc.ConfigDict(json.load(fd))
-
     num_epochs = config.trainer_args.sampling_args.num_epochs
     save = config.trainer_args.save
     save_dir = config.trainer_args.output_dir

@@ -1,0 +1,1 @@
+from tiny_t5x.version import __version__
