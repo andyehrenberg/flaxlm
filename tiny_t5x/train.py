@@ -1,21 +1,21 @@
 from absl import app, flags
-import json
 
 import jax
 import jax.random as jrandom
 from ml_collections import config_flags
 
-import src.data as data
-import src.mesh_utils as mesh_utils
-import src.partitioning_utils as partitioning_utils
-import src.trainer as flax_trainer
-import src.utils as utils
+import tiny_t5x.src.data as data
+import tiny_t5x.src.mesh_utils as mesh_utils
+import tiny_t5x.src.partitioning_utils as partitioning_utils
+import tiny_t5x.src.trainer as flax_trainer
+import tiny_t5x.src.utils as utils
 
 import transformers
 
-config = config_flags.DEFINE_config_file('config')
+config_flags.DEFINE_config_file('config')
 
 def train(_):
+    config = flags.FLAGS.config
     num_epochs = config.trainer_args.sampling_args.num_epochs
     save = config.trainer_args.save
     save_dir = config.trainer_args.output_dir
