@@ -11,7 +11,7 @@ from version import __version__
 with open('README.md') as fp:
     long_description = fp.read()
 
-_jax_version = '0.4.3'
+_jax_version = '0.4.2'
 
 with open("requirements.txt", "r") as f:
     requirements = [line for line in f.readlines()]
@@ -39,5 +39,6 @@ setuptools.setup(
         # Cloud TPU requirements.
         'tpu': [f'jax[tpu] >= {_jax_version}'],
         'gpu': [f'jax[cuda] >= {_jax_version}'],
+        'cpu': [f'jax[cpu] >= {_jax_version}'],
     },
 )
