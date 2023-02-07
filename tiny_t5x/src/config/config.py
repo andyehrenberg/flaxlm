@@ -1,6 +1,6 @@
 import ml_collections as mlc
 
-from ..transformers_patch import FlaxGPTJForCausalLM, FlaxT5ForConditionalGeneration
+from tiny_t5x.src.transformers_patch import FlaxGPTJForCausalLM, FlaxT5ForConditionalGeneration
 
 
 def get_config():
