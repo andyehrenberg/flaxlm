@@ -204,14 +204,16 @@ def save_params(params: frozen_dict.FrozenDict, directory: str):
 
 def save_checkpoint(train_state, ckpt_dir, step):
     if jax.process_count() > 1:
-        async_checkpointer = orbax.AsyncCheckpointer(orbax.PyTreeCheckpointHandler(), timeout_secs=50)
+        async_checkpointer = orbax.AsyncCheckpointer(
+            orbax.PyTreeCheckpointHandler(), timeout_secs=50
+        )
         checkpoints.save_checkpoint_multiprocess(
-            ckpt_dir, 
-            train_state, 
-            step=step, 
-            overwrite=True, 
-            keep=4, 
-            orbax_checkpointer=async_checkpointer
+            ckpt_dir,
+            train_state,
+            step=step,
+            overwrite=True,
+            keep=4,
+            orbax_checkpointer=async_checkpointer,
         )
     else:
         orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
@@ -221,13 +223,15 @@ def save_checkpoint(train_state, ckpt_dir, step):
             step=step,
             overwrite=True,
             keep=4,
-            orbax_checkpointer=orbax_checkpointer
+            orbax_checkpointer=orbax_checkpointer,
         )
 
 
 def restore_checkpoint(target, ckpt_dir, step=0):
     if jax.process_count() > 1:
-        async_checkpointer = orbax.AsyncCheckpointer(orbax.PyTreeCheckpointHandler(), timeout_secs=50)
+        async_checkpointer = orbax.AsyncCheckpointer(
+            orbax.PyTreeCheckpointHandler(), timeout_secs=50
+        )
         restored = checkpoints.restore_checkpoint(
             ckpt_dir,
             target=target,
@@ -235,9 +239,7 @@ def restore_checkpoint(target, ckpt_dir, step=0):
             orbax_checkpointer=async_checkpointer,
         )
     else:
-        restored = checkpoints.restore_checkpoint(
-            ckpt_dir, target=target, step=step
-        )
+        restored = checkpoints.restore_checkpoint(ckpt_dir, target=target, step=step)
 
     return restored
 
@@ -348,6 +350,7 @@ def init_logging(config):
             job_type=config.logging_args.wandb_job_type,
             config=config,
         )
+
 
 def log_metrics(metrics, step):
     if jax.process_index() == 0:

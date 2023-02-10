@@ -12,7 +12,8 @@ import flaxlm.src.utils as utils
 
 import transformers
 
-config_flags.DEFINE_config_file('config')
+config_flags.DEFINE_config_file("config")
+
 
 def train(_):
     config = flags.FLAGS.config
@@ -103,17 +104,22 @@ def train(_):
     )
 
     steps_per_epoch = train_dataset._global_min_length
-    config.trainer_args.num_train_steps = steps_per_epoch * num_epochs
+    num_train_steps = steps_per_epoch * num_epochs
 
-    trainer = flax_trainer.Trainer(model_cls, config.trainer_args, mesh)
+    trainer = flax_trainer.Trainer(
+        model_cls,
+        config.trainer_args,
+        mesh,
+        num_train_steps,
+    )
 
     def run_eval(trainer, eval_data):
         pass
 
     num_steps = 0
 
-    eval_metrics = run_eval(trainer, eval_dataset)
-    utils.log_metrics(eval_metrics, num_steps)
+    # eval_metrics = run_eval(trainer, eval_dataset)
+    # utils.log_metrics(eval_metrics, num_steps)
 
     for epoch in range(num_epochs):
         key, rng = jrandom.split(rng)
@@ -121,8 +127,8 @@ def train(_):
             metrics = trainer.train_step(batch)
             num_steps += 1
             utils.log_metrics(metrics, num_steps)
-        eval_metrics = run_eval(trainer, eval_dataset)
-        utils.log_metrics(eval_metrics, num_steps)
+        # eval_metrics = run_eval(trainer, eval_dataset)
+        # utils.log_metrics(eval_metrics, num_steps)
 
     if jax.process_index() == 0:
         if save:

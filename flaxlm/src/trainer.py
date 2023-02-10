@@ -90,7 +90,7 @@ def decoder_only_loss_fn(apply_fn, params, batch, use_dropout, dropout_rng):
 
 
 class Trainer:
-    def __init__(self, model_cls: Type, args: Dict, mesh: Mesh):
+    def __init__(self, model_cls: Type, args: Dict, mesh: Mesh, num_train_steps: int):
         self.gradient_accumulation_steps = (
             args.sampling_args.gradient_accumulation_steps
         )
@@ -100,7 +100,7 @@ class Trainer:
         self.use_dropout = args.optimizer_args.use_dropout
         self.num_epochs = args.sampling_args.num_epochs
         pretrained_path = args.model_args.pretrained_model_name_or_path
-        self.num_train_steps = args.num_train_steps
+        self.num_train_steps = num_train_steps
         self.half_precision = args.optimizer_args.half_precision
         self.mp_num = args.parallelism_args.mp_num
         from_pt = args.model_args.from_pt
