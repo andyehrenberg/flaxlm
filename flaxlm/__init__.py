@@ -1,1 +1,1 @@
-from flax_lm.version import __version__
+from flaxlm.version import __version__
