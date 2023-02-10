@@ -1,4 +1,4 @@
-# tiny_t5x
+# flaxlm
 
 Training/fine-tuning language models with flexible, user-defined data and model parallelism using new parallelism features from Flax and JAX.
 
@@ -23,11 +23,11 @@ https://github.com/stanford-crfm/levanter (multihost utils, getting layout of de
 Running on TPU:
 
 ```bash
-git clone https://github.com/andyehrenberg/tiny_t5x.git
-cd tiny_t5x
+git clone https://github.com/andyehrenberg/flaxlm.git
+cd flaxlm
 python3 -m pip install --upgrade pip
 python3 -m pip install -e ".[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 wandb login
 
-python3 tiny_t5x/train.py --config=tiny_t5x/src/config/config.py
+python3 flaxlm/train.py --config=flaxlm/src/config/config.py
 ```

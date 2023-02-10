@@ -3,7 +3,7 @@ import sys
 import setuptools
 
 # To enable importing version.py directly, we add its path to sys.path.
-version_path = os.path.join(os.path.dirname(__file__), 'tiny_t5x')
+version_path = os.path.join(os.path.dirname(__file__), 'flaxlm')
 sys.path.append(version_path)
 from version import __version__ 
 
@@ -19,14 +19,14 @@ with open("requirements.txt", "r") as f:
 print(setuptools.find_packages())
 
 setuptools.setup(
-    name='tiny_t5x',
+    name='flaxlm',
     version=__version__,
-    description='Flexible parallelism for training transformers',
+    description='Flexible parallelism for training language models with Flax/JAX',
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='Andy Ehrenberg',
     author_email='andyehrenberg@gmail.com',
-    url='http://github.com/andyehrenberg/tiny_t5x',
+    url='http://github.com/andyehrenberg/flaxlm',
     packages=setuptools.find_packages(),
     scripts=[],
     install_requires=requirements,
