@@ -4,11 +4,11 @@ import jax
 import jax.random as jrandom
 from ml_collections import config_flags
 
-import tiny_t5x.src.data as data
-import tiny_t5x.src.mesh_utils as mesh_utils
-import tiny_t5x.src.partitioning_utils as partitioning_utils
-import tiny_t5x.src.trainer as flax_trainer
-import tiny_t5x.src.utils as utils
+import flax_lm.src.data as data
+import flax_lm.src.mesh_utils as mesh_utils
+import flax_lm.src.partitioning_utils as partitioning_utils
+import flax_lm.src.trainer as flax_trainer
+import flax_lm.src.utils as utils
 
 import transformers
 

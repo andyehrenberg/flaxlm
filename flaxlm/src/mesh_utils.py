@@ -21,7 +21,7 @@ from jax.experimental.mesh_utils import create_hybrid_device_mesh
 from jax.sharding import Mesh
 import flax.linen as nn
 
-import tiny_t5x.src.partitioning_utils as partitioning_utils
+import flaxlm.src.partitioning_utils as partitioning_utils
 
 JaxDevice = jax.lib.xla_client.Device
 TpuMesh = Tuple[int, int, int, int]  # (x, y, z, num_cores).

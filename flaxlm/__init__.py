@@ -1,1 +1,1 @@
-from tiny_t5x.version import __version__
+from flax_lm.version import __version__
