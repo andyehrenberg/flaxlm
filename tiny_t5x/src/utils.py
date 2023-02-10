@@ -2,6 +2,12 @@ import functools
 import os
 from typing import Any, Callable, Sequence, Union
 
+import flax
+import flax.core.frozen_dict as frozen_dict
+import flax.linen as nn
+import flax.serialization as serialization
+from flax.training import checkpoints, train_state
+import orbax.checkpoint as orbax
 import jax
 import jax.lax as lax
 import jax.numpy as jnp
@@ -9,13 +15,6 @@ import ml_collections as mlc
 from chex import Array
 from jax.sharding import PartitionSpec
 import wandb
-
-import flax
-import flax.core.frozen_dict as frozen_dict
-import flax.linen as nn
-import flax.serialization as serialization
-from flax.training import checkpoints, train_state
-import orbax.checkpoint as orbax
 
 P = PartitionSpec
 
@@ -239,7 +238,7 @@ def restore_checkpoint(target, ckpt_dir, step=0):
         restored = checkpoints.restore_checkpoint(
             ckpt_dir, target=target, step=step
         )
-        
+
     return restored
 
 
