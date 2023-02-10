@@ -14,7 +14,8 @@ import flax
 import flax.core.frozen_dict as frozen_dict
 import flax.linen as nn
 import flax.serialization as serialization
-import flax.training.train_state as train_state
+from flax.training import checkpoints, train_state
+import orbax.checkpoint as orbax
 
 P = PartitionSpec
 
@@ -200,6 +201,46 @@ def save_params(params: frozen_dict.FrozenDict, directory: str):
     with open(f"{directory}/params", "wb") as f:
         state_bytes = serialization.to_bytes(params)
         f.write(state_bytes)
+
+
+def save_checkpoint(train_state, ckpt_dir, step):
+    if jax.process_count() > 1:
+        async_checkpointer = orbax.AsyncCheckpointer(orbax.PyTreeCheckpointHandler(), timeout_secs=50)
+        checkpoints.save_checkpoint_multiprocess(
+            ckpt_dir, 
+            train_state, 
+            step=step, 
+            overwrite=True, 
+            keep=4, 
+            orbax_checkpointer=async_checkpointer
+        )
+    else:
+        orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+        checkpoints.save_checkpoint(
+            ckpt_dir,
+            train_state,
+            step=step,
+            overwrite=True,
+            keep=4,
+            orbax_checkpointer=orbax_checkpointer
+        )
+
+
+def restore_checkpoint(target, ckpt_dir, step=0):
+    if jax.process_count() > 1:
+        async_checkpointer = orbax.AsyncCheckpointer(orbax.PyTreeCheckpointHandler(), timeout_secs=50)
+        restored = checkpoints.restore_checkpoint(
+            ckpt_dir,
+            target=target,
+            step=step,
+            orbax_checkpointer=async_checkpointer,
+        )
+    else:
+        restored = checkpoints.restore_checkpoint(
+            ckpt_dir, target=target, step=step
+        )
+        
+    return restored
 
 
 def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
