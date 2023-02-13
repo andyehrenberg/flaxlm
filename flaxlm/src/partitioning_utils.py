@@ -22,6 +22,10 @@ def shard_logically_partitioned_params(params, mesh):
     )
 
 
+def constraint_tree(tree, tree_spec):
+    tree = jax.tree_util.tree_map()
+
+
 def make_param_partitionable(param, mp_num, dim):
     if mp_num == 1:
         return param

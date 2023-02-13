@@ -25,6 +25,19 @@ class TrainState(train_state.TrainState):
     eval_apply_fn: Callable = flax.struct.field(pytree_node=False)
     generate_fn: Callable = flax.struct.field(pytree_node=False)
 
+    @classmethod
+    def create(cls, *, apply_fn, params, tx, **kwargs):
+        """Creates a new instance with `step=0` and initialized `opt_state`."""
+        opt_state = tx.init(params)
+        return cls(
+            step=jnp.array(0),
+            apply_fn=apply_fn,
+            params=params,
+            tx=tx,
+            opt_state=opt_state,
+            **kwargs,
+        )
+
 
 class DynamicScale(flax.struct.PyTreeNode):
     """Dynamic loss scaling for mixed precision gradients.
@@ -181,7 +194,78 @@ def setup_model(
                 range(original_vocab, config.vocab_size)
             )
 
-    return model, eval_model, params
+    return model, eval_model, frozen_dict.freeze(params)
+
+
+def setup_model(
+    model_cls,
+    pretrained_path,
+    mp_num,
+    from_pt,
+    dtype,
+    gradient_checkpointing,
+    randomize,
+    config: None,
+):
+    with jax.default_device(jax.devices("cpu")[0]):
+        if not randomize:
+            model = model_cls.from_pretrained(
+                pretrained_path, from_pt=from_pt, dtype=dtype
+            )
+            params = model.params
+            original_vocab = model.config.vocab_size
+            config = model.config
+
+            if gradient_checkpointing:
+                config.gradient_checkpointing = True
+
+            if mp_num > 1:
+                remainder = original_vocab % mp_num
+                config.vocab_size = original_vocab + mp_num - remainder
+
+                # expand embedding to be able to be partitioned
+                emb = jnp.zeros((config.vocab_size, model.config.hidden_size))
+                emb = emb.at[:original_vocab, :].set(
+                    model.params["model"]["decoder"]["embed_tokens"]["embedding"].value
+                )
+
+                params["model"]["decoder"]["embed_tokens"][
+                    "embedding"
+                ] = nn.LogicallyPartitioned(
+                    value=emb,
+                    names=model.params["model"]["decoder"]["embed_tokens"][
+                        "embedding"
+                    ].names,
+                )
+
+            model = model_cls(config, _do_init=False, dtype=dtype)
+        else:
+            if not config:
+                model = model_cls.from_pretrained(pretrained_path)
+                config = model.config
+            original_vocab = config.vocab_size
+
+            if gradient_checkpointing:
+                config.gradient_checkpointing = True
+
+            if mp_num > 1:
+                remainder = original_vocab % mp_num
+                config.vocab_size = original_vocab + mp_num - remainder
+
+            model = model_cls(config, dtype=dtype)
+            params = model.params
+
+        eval_model = (
+            model
+            if dtype == jnp.float32
+            else model_cls(config, _do_init=False, dtype=jnp.float32)
+        )
+        model.config.suppress_tokens += list(range(original_vocab, config.vocab_size))
+        eval_model.config.suppress_tokens += list(
+            range(original_vocab, config.vocab_size)
+        )
+
+    return model, eval_model, frozen_dict.freeze(params)
 
 
 def flatten_config(d):

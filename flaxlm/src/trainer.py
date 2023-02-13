@@ -4,6 +4,7 @@ from typing import Callable, Dict, Tuple, Type
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
+import jax.experimental.pjit as pjit
 import optax
 import src.partitioning_utils as partitioning_utils
 import src.utils as utils
@@ -156,7 +157,6 @@ class Trainer:
 
         self.setup_train_state(model, eval_model, params, dropout_rng)
         del params
-        self.param_spec = self.train_state_spec.params
         self.batch_spec = P("batch")
         self.grad_batch_spec = P(None, "batch")
 
@@ -227,31 +227,34 @@ class Trainer:
 
         train_state_shape = jax.eval_shape(create_fn, dropout_rng, params)
         self.train_state_spec = nn.get_partition_spec(train_state_shape)
+        train_state_spec = nn.logical_to_mesh(self.train_state_spec)
 
         @self.with_mesh
         @jax.jit
-        def create_fn(dropout_rng, params):
-            train_state = utils.TrainState.create(
-                apply_fn=model.__call__,
-                eval_apply_fn=eval_model.__call__,
-                generate_fn=eval_model.generate,
-                params=params,
-                tx=tx,
-                dynamic_scale=dynamic_scale,
-                dropout_rng=dropout_rng,
-            )
-            train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
+        def partitioned_create(dropout_rng, params):
+            train_state = create_fn(dropout_rng, params)
+            train_state = nn.with_logical_constraint(train_state, train_state_spec)
 
             return train_state
 
-        self.train_state = create_fn(dropout_rng, params)
+        p_create_fn = self.with_mesh(
+            pjit.pjit(
+                create_fn,
+                in_axis_resources=(P(None), train_state_spec.params),
+                out_axis_resources=train_state_spec,
+            )
+        )
+
+        self.train_state = p_create_fn(dropout_rng, params)
+
+        # self.train_state = create_fn(dropout_rng, params)
         self.param_spec = self.train_state_spec.params
 
     def make_train_step(self) -> Callable:
         def train_step(
             train_state: utils.TrainState, batch: Dict
         ) -> Tuple[utils.TrainState, Dict]:
-            train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
+            # train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
 
             batch = nn.with_logical_constraint(
                 batch,
@@ -376,9 +379,9 @@ class Trainer:
 
             new_train_state = train_state.apply_gradients(grads=grads)
 
-            new_train_state = nn.with_logical_constraint(
-                new_train_state, self.train_state_spec
-            )
+            # new_train_state = nn.with_logical_constraint(
+            #    new_train_state, self.train_state_spec
+            # )
 
             if self.half_precision:
                 new_train_state = new_train_state.replace(
@@ -396,9 +399,9 @@ class Trainer:
                     dropout_rng=dropout_rng,
                 )
 
-            new_train_state = nn.with_logical_constraint(
-                new_train_state, self.train_state_spec
-            )
+            # new_train_state = nn.with_logical_constraint(
+            #    new_train_state, self.train_state_spec
+            # )
 
             return new_train_state, metrics
 

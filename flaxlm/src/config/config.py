@@ -80,9 +80,9 @@ def get_config():
     config.data_args = data_args
 
     config.logging_args = dict(
-        wandb_entity="",
-        wandb_project="",
-        wandb_job_type="",
+        wandb_entity="andyehrenberg",
+        wandb_project="flaxlm",
+        wandb_job_type="tpu",
     )
 
     return config
