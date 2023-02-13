@@ -227,10 +227,8 @@ class Trainer:
 
         train_state_shape = jax.eval_shape(create_fn, params)
         self.train_state_spec = nn.get_partition_spec(train_state_shape)
-        print(self.train_state_spec.step)
-        print(self.train_state_spec.tx)
-        print(self.train_state_spec.dynamic_scale)
-        train_state_spec = nn.logical_to_mesh(self.train_state_spec)
+        self.param_spec = self.train_state_spec.params
+        self.mesh_train_state_spec = nn.logical_to_mesh(self.train_state_spec)
         print(nn.get_logical_axis_rules())
 
         @self.with_mesh
@@ -238,30 +236,28 @@ class Trainer:
         def partitioned_create(params):
             train_state = create_fn(params)
             train_state = jax.lax.with_sharding_constraint(
-                train_state, train_state_spec
+                train_state, self.mesh_train_state_spec
             )
-            #train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
 
             return train_state
 
         p_create_fn = self.with_mesh(
             pjit.pjit(
                 create_fn,
-                in_axis_resources=train_state_spec.params,
-                out_axis_resources=train_state_spec,
+                in_axis_resources=self.mesh_train_state_spec.params,
+                out_axis_resources=self.mesh_train_state_spec,
             )
         )
 
-        # self.train_state = p_create_fn(params)
         self.train_state = partitioned_create(params)
-
-        self.param_spec = self.train_state_spec.params
 
     def make_train_step(self) -> Callable:
         def train_step(
             train_state: utils.TrainState, batch: Dict
         ) -> Tuple[utils.TrainState, Dict]:
-            # train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
+            train_state = jax.lax.with_sharding_constraint(
+                train_state, self.mesh_train_state_spec
+            )
 
             batch = nn.with_logical_constraint(
                 batch,
@@ -386,9 +382,9 @@ class Trainer:
 
             new_train_state = train_state.apply_gradients(grads=grads)
 
-            # new_train_state = nn.with_logical_constraint(
-            #    new_train_state, self.train_state_spec
-            # )
+            new_train_state = jax.lax.with_sharding_constraint(
+                new_train_state, self.mesh_train_state_spec
+            )
 
             if self.half_precision:
                 new_train_state = new_train_state.replace(
@@ -406,9 +402,9 @@ class Trainer:
                     dropout_rng=dropout_rng,
                 )
 
-            # new_train_state = nn.with_logical_constraint(
-            #    new_train_state, self.train_state_spec
-            # )
+            new_train_state = jax.lax.with_sharding_constraint(
+                new_train_state, self.mesh_train_state_spec
+            )
 
             return new_train_state, metrics
 
