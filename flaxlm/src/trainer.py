@@ -227,6 +227,9 @@ class Trainer:
 
         train_state_shape = jax.eval_shape(create_fn, dropout_rng, params)
         self.train_state_spec = nn.get_partition_spec(train_state_shape)
+        print(self.train_state_spec.step)
+        print(self.train_state_spec.tx)
+        print(self.train_state_spec.dynamic_scale)
         train_state_spec = nn.logical_to_mesh(self.train_state_spec)
 
         @self.with_mesh
