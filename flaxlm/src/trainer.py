@@ -233,7 +233,7 @@ class Trainer:
         @jax.jit
         def partitioned_create(dropout_rng, params):
             train_state = create_fn(dropout_rng, params)
-            train_state = nn.with_logical_constraint(train_state, train_state_spec)
+            train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
 
             return train_state
 
