@@ -48,8 +48,8 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 
-from src.transformers_patch.t5_config_remat import T5Config
-from src.transformers_patch.logically_partitioned_model import LogicallyPartitionedModel
+from flaxlm.src.transformers_patch.t5_config_remat import T5Config
+from flaxlm.src.transformers_patch.logically_partitioned_model import LogicallyPartitionedModel
 
 P = PartitionSpec
 remat = nn_partitioning.remat

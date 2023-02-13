@@ -5,8 +5,8 @@ import jax
 import jax.numpy as jnp
 import jax.random as jrandom
 import optax
-import src.partitioning_utils as partitioning_utils
-import src.utils as utils
+import flaxlm.src.partitioning_utils as partitioning_utils
+import flaxlm.src.utils as utils
 from chex import Array, Scalar
 from jax.sharding import Mesh, PartitionSpec
 
@@ -246,6 +246,7 @@ class Trainer:
         def train_step(
             train_state: utils.TrainState, batch: Dict
         ) -> Tuple[utils.TrainState, Dict]:
+            print("Compiling train step")
             train_state = jax.lax.with_sharding_constraint(
                 train_state, self.mesh_train_state_spec
             )
@@ -448,6 +449,7 @@ class Trainer:
 
     def make_eval_step(self) -> Callable:
         def eval_step(train_state: utils.TrainState, batch: Dict) -> Dict:
+            print("Compiling eval step")
             train_state = jax.lax.with_sharding_constraint(
                 train_state, self.mesh_train_state_spec
             )
@@ -482,15 +484,9 @@ class Trainer:
 
     def run_eval(self, dataloader):
         losses, weights = 0.0, 0.0
-        i = 0
         for batch in dataloader:
             metrics = self.eval(self.train_state, batch)
-            if i == 0:
-                print(metrics["loss"], metrics["weight"])
-            i += 1
             losses += metrics["loss"] * metrics["weight"]
             weights += metrics["weight"]
-
-        print(losses)
 
         return {"eval loss": losses / weights}

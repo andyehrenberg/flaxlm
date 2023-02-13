@@ -462,8 +462,6 @@ class PerHostDataset:
             self.data_axes,
         )
 
-        print(self._global_min_length)
-
         for step in tqdm(range(self._global_min_length)):
             yield next_fn()
 
