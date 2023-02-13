@@ -482,9 +482,15 @@ class Trainer:
 
     def run_eval(self, dataloader):
         losses, weights = 0.0, 0.0
+        i = 0
         for batch in dataloader:
             metrics = self.eval(self.train_state, batch)
+            if i == 0:
+                print(metrics["loss"], metrics["weight"])
+            i += 1
             losses += metrics["loss"] * metrics["weight"]
             weights += metrics["weight"]
+
+        print(losses)
 
         return {"eval loss": losses / weights}
