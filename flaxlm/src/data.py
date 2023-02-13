@@ -12,6 +12,7 @@ from chex import Array, Scalar
 from jax.experimental import global_device_array as gda_lib
 from jax.experimental.global_device_array import Device
 from jax.sharding import Mesh, NamedSharding, PartitionSpec
+from tqdm import tqdm
 
 import flax.linen as nn
 
@@ -461,7 +462,7 @@ class PerHostDataset:
             self.data_axes,
         )
 
-        for step in range(self._global_min_length):
+        for step in tqdm(range(self._global_min_length)):
             yield next_fn()
 
     @cached_property
