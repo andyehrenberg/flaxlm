@@ -132,7 +132,7 @@ class DynamicScale(flax.struct.PyTreeNode):
 
 
 class NoOp(flax.struct.PyTreeNode):
-    scale: Array = jnp.array(1.0)
+    scale: Array = jnp.array([1.0])
 
     def update(self, grad):
         return self, jnp.array(True)
