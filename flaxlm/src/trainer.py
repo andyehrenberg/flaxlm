@@ -231,13 +231,16 @@ class Trainer:
         print(self.train_state_spec.tx)
         print(self.train_state_spec.dynamic_scale)
         train_state_spec = nn.logical_to_mesh(self.train_state_spec)
-        print(train_state_spec.params)
+        print(nn.get_logical_axis_rules())
 
         @self.with_mesh
         @jax.jit
         def partitioned_create(params):
             train_state = create_fn(params)
-            train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
+            train_state = jax.lax.with_sharding_constraint(
+                train_state, train_state_spec
+            )
+            #train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
 
             return train_state
 
