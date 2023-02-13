@@ -30,7 +30,7 @@ class TrainState(train_state.TrainState):
         """Creates a new instance with `step=0` and initialized `opt_state`."""
         opt_state = tx.init(params)
         return cls(
-            step=jnp.array(0),
+            step=jnp.array([0]),
             apply_fn=apply_fn,
             params=params,
             tx=tx,
@@ -78,8 +78,8 @@ class DynamicScale(flax.struct.PyTreeNode):
     growth_factor: float = flax.struct.field(pytree_node=False, default=2.0)
     backoff_factor: float = flax.struct.field(pytree_node=False, default=0.5)
     growth_interval: int = flax.struct.field(pytree_node=False, default=2000)
-    fin_steps: Array = jnp.array(0)
-    scale: Array = jnp.array(65536.0)
+    fin_steps: Array = jnp.array([0])
+    scale: Array = jnp.array([65536.0])
 
     def update(
         self,
