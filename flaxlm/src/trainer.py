@@ -245,9 +245,9 @@ class Trainer:
             )
         )
 
-        self.train_state = p_create_fn(dropout_rng, params)
+        #self.train_state = p_create_fn(dropout_rng, params)
+        self.train_state = partitioned_create(dropout_rng, params)
 
-        # self.train_state = create_fn(dropout_rng, params)
         self.param_spec = self.train_state_spec.params
 
     def make_train_step(self) -> Callable:

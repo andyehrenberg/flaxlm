@@ -78,8 +78,8 @@ class DynamicScale(flax.struct.PyTreeNode):
     growth_factor: float = flax.struct.field(pytree_node=False, default=2.0)
     backoff_factor: float = flax.struct.field(pytree_node=False, default=0.5)
     growth_interval: int = flax.struct.field(pytree_node=False, default=2000)
-    fin_steps: Array = 0
-    scale: Array = 65536.0
+    fin_steps: Array = jnp.array(0)
+    scale: Array = jnp.array(65536.0)
 
     def update(
         self,
@@ -132,7 +132,7 @@ class DynamicScale(flax.struct.PyTreeNode):
 
 
 class NoOp(flax.struct.PyTreeNode):
-    scale: Array = 1.0
+    scale: Array = jnp.array(1.0)
 
     def update(self, grad):
         return self, jnp.array(True)
