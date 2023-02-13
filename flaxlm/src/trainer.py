@@ -214,7 +214,7 @@ class Trainer:
             params, self.mesh
         )
 
-        def create_fn(dropout_rng, params):
+        def create_fn(params):
             return utils.TrainState.create(
                 apply_fn=model.__call__,
                 eval_apply_fn=eval_model.__call__,
@@ -225,17 +225,18 @@ class Trainer:
                 dropout_rng=dropout_rng,
             )
 
-        train_state_shape = jax.eval_shape(create_fn, dropout_rng, params)
+        train_state_shape = jax.eval_shape(create_fn, params)
         self.train_state_spec = nn.get_partition_spec(train_state_shape)
         print(self.train_state_spec.step)
         print(self.train_state_spec.tx)
         print(self.train_state_spec.dynamic_scale)
         train_state_spec = nn.logical_to_mesh(self.train_state_spec)
+        print(train_state_spec.params)
 
         @self.with_mesh
         @jax.jit
-        def partitioned_create(dropout_rng, params):
-            train_state = create_fn(dropout_rng, params)
+        def partitioned_create(params):
+            train_state = create_fn(params)
             train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
 
             return train_state
@@ -243,13 +244,13 @@ class Trainer:
         p_create_fn = self.with_mesh(
             pjit.pjit(
                 create_fn,
-                in_axis_resources=(P(None), train_state_spec.params),
+                in_axis_resources=train_state_spec.params,
                 out_axis_resources=train_state_spec,
             )
         )
 
-        # self.train_state = p_create_fn(dropout_rng, params)
-        self.train_state = partitioned_create(dropout_rng, params)
+        # self.train_state = p_create_fn(params)
+        self.train_state = partitioned_create(params)
 
         self.param_spec = self.train_state_spec.params
 
