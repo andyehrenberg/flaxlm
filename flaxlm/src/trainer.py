@@ -449,7 +449,21 @@ class Trainer:
             batch,
         )
 
+        print(
+            self.train_state.params["decoder"]["block"]["1"]["layer"]["0"][
+                "SelfAttention"
+            ]["k"]["kernel"].value.addressable_shards
+        )
+        print(self.train_state.step)
+
         self.train_state, metrics = self.train(self.train_state, batch)
+
+        print(
+            self.train_state.params["decoder"]["block"]["1"]["layer"]["0"][
+                "SelfAttention"
+            ]["k"]["kernel"].value.addressable_shards
+        )
+        print(self.train_state.step)
 
         return metrics
 
