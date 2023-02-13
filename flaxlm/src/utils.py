@@ -153,8 +153,8 @@ def setup_model(
     from_pt,
     dtype,
     gradient_checkpointing,
-    randomize = False,
-    config = None,
+    randomize=False,
+    config=None,
 ):
     with jax.default_device(jax.devices("cpu")[0]):
         if not randomize:
@@ -177,7 +177,9 @@ def setup_model(
                     # expand embedding to be able to be partitioned
                     emb = jnp.zeros((config.vocab_size, model.config.hidden_size))
                     emb = emb.at[:original_vocab, :].set(
-                        model.params["model"]["decoder"]["embed_tokens"]["embedding"].value
+                        model.params["model"]["decoder"]["embed_tokens"][
+                            "embedding"
+                        ].value
                     )
 
                     params["model"]["decoder"]["embed_tokens"][
@@ -211,10 +213,13 @@ def setup_model(
             if dtype == jnp.float32
             else model_cls(config, _do_init=False, dtype=jnp.float32)
         )
-        model.config.suppress_tokens += list(range(original_vocab, config.vocab_size))
-        eval_model.config.suppress_tokens += list(
-            range(original_vocab, config.vocab_size)
-        )
+        if config.vocab_size != original_vocab:
+            model.config.suppress_tokens += list(
+                range(original_vocab, config.vocab_size)
+            )
+            eval_model.config.suppress_tokens += list(
+                range(original_vocab, config.vocab_size)
+            )
 
     return model, eval_model, frozen_dict.freeze(params)
 
