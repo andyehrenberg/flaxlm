@@ -65,7 +65,7 @@ def get_config():
         remove_columns=["id"],
         decoder_input_ids_column_name="highlights",
         dataset="cnn_dailymail",
-        dataset_name="1.0.0",
+        dataset_name="3.0.0",
         dataset_split="train",
     )
     data_args.eval = dict(
@@ -73,7 +73,7 @@ def get_config():
         remove_columns=["id"],
         decoder_input_ids_column_name="highlights",
         dataset="cnn_dailymail",
-        dataset_name="1.0.0",
+        dataset_name="3.0.0",
         dataset_split="validation",
     )
 
