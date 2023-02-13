@@ -1,10 +1,10 @@
 from functools import partial
 from typing import Callable, Dict, Tuple, Type
+from tqdm import tqdm
 
 import jax
 import jax.numpy as jnp
 import jax.random as jrandom
-import jax.experimental.pjit as pjit
 import optax
 import src.partitioning_utils as partitioning_utils
 import src.utils as utils
@@ -483,7 +483,7 @@ class Trainer:
 
     def run_eval(self, dataloader):
         losses, weights = 0.0, 0.0
-        for batch in dataloader:
+        for batch in tqdm(dataloader):
             metrics = self.eval(self.train_state, batch)
             losses += metrics["loss"] * metrics["weight"]
             weights += metrics["weight"]
