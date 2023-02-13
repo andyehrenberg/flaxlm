@@ -33,7 +33,9 @@ from transformers.modeling_flax_utils import ACT2FN, append_call_sample_docstrin
 from transformers.utils import add_start_docstrings, logging
 
 from flaxlm.src.transformers_patch.opt_config_remat import OPTConfig
-from flaxlm.src.transformers_patch.logically_partitioned_model import LogicallyPartitionedModel
+from flaxlm.src.transformers_patch.logically_partitioned_model import (
+    LogicallyPartitionedModel,
+)
 
 remat = nn_partitioning.remat
 

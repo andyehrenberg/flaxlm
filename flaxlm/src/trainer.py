@@ -242,6 +242,12 @@ class Trainer:
 
         self.train_state = partitioned_create(params)
 
+        print(
+            self.train_state.params["decoder"]["block"]["1"]["layer"]["0"][
+                "SelfAttention"
+            ]["k"]["kernel"].value.addressable_shards
+        )
+
     def make_train_step(self) -> Callable:
         def train_step(
             train_state: utils.TrainState, batch: Dict

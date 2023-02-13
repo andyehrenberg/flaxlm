@@ -40,7 +40,9 @@ from transformers.utils import (
 )
 
 from flaxlm.src.transformers_patch.gptj_config_remat import GPTJConfig
-from flaxlm.src.transformers_patch.logically_partitioned_model import LogicallyPartitionedModel
+from flaxlm.src.transformers_patch.logically_partitioned_model import (
+    LogicallyPartitionedModel,
+)
 
 P = PartitionSpec
 remat = nn_partitioning.remat
