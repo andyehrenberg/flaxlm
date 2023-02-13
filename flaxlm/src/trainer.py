@@ -229,7 +229,6 @@ class Trainer:
         self.train_state_spec = nn.get_partition_spec(train_state_shape)
         self.param_spec = self.train_state_spec.params
         self.mesh_train_state_spec = nn.logical_to_mesh(self.train_state_spec)
-        print(nn.get_logical_axis_rules())
 
         @self.with_mesh
         @jax.jit
@@ -240,14 +239,6 @@ class Trainer:
             )
 
             return train_state
-
-        p_create_fn = self.with_mesh(
-            pjit.pjit(
-                create_fn,
-                in_axis_resources=self.mesh_train_state_spec.params,
-                out_axis_resources=self.mesh_train_state_spec,
-            )
-        )
 
         self.train_state = partitioned_create(params)
 
