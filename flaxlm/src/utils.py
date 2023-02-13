@@ -147,65 +147,14 @@ class NoOp(flax.struct.PyTreeNode):
 
 
 def setup_model(
-    model_cls, pretrained_path, mp_num, from_pt, dtype, gradient_checkpointing
-):
-    with jax.default_device(jax.devices("cpu")[0]):
-        model = model_cls.from_pretrained(pretrained_path, from_pt=from_pt, dtype=dtype)
-        params = model.params
-        original_vocab = model.config.vocab_size
-        config = model.config
-
-        if gradient_checkpointing:
-            config.gradient_checkpointing = True
-
-        if mp_num > 1:
-            remainder = original_vocab % mp_num
-            if remainder != 0:
-                # deal with gpt2 vocab
-                config.vocab_size = original_vocab + mp_num - remainder
-
-                # expand embedding to be able to be partitioned
-                emb = jnp.zeros((config.vocab_size, model.config.hidden_size))
-                emb = emb.at[:original_vocab, :].set(
-                    model.params["model"]["decoder"]["embed_tokens"]["embedding"].value
-                )
-
-                params["model"]["decoder"]["embed_tokens"][
-                    "embedding"
-                ] = nn.LogicallyPartitioned(
-                    value=emb,
-                    names=model.params["model"]["decoder"]["embed_tokens"][
-                        "embedding"
-                    ].names,
-                )
-
-        model = model_cls(config, _do_init=False, dtype=dtype)
-        eval_model = (
-            model
-            if dtype == jnp.float32
-            else model_cls(config, _do_init=False, dtype=jnp.float32)
-        )
-
-        if original_vocab != config.vocab_size:
-            model.config.suppress_tokens += list(
-                range(original_vocab, config.vocab_size)
-            )
-            eval_model.config.suppress_tokens += list(
-                range(original_vocab, config.vocab_size)
-            )
-
-    return model, eval_model, frozen_dict.freeze(params)
-
-
-def setup_model(
     model_cls,
     pretrained_path,
     mp_num,
     from_pt,
     dtype,
     gradient_checkpointing,
-    randomize,
-    config: None,
+    randomize = False,
+    config = None,
 ):
     with jax.default_device(jax.devices("cpu")[0]):
         if not randomize:
@@ -221,22 +170,24 @@ def setup_model(
 
             if mp_num > 1:
                 remainder = original_vocab % mp_num
-                config.vocab_size = original_vocab + mp_num - remainder
+                if remainder != 0:
+                    # deal with gpt2 vocab
+                    config.vocab_size = original_vocab + mp_num - remainder
 
-                # expand embedding to be able to be partitioned
-                emb = jnp.zeros((config.vocab_size, model.config.hidden_size))
-                emb = emb.at[:original_vocab, :].set(
-                    model.params["model"]["decoder"]["embed_tokens"]["embedding"].value
-                )
+                    # expand embedding to be able to be partitioned
+                    emb = jnp.zeros((config.vocab_size, model.config.hidden_size))
+                    emb = emb.at[:original_vocab, :].set(
+                        model.params["model"]["decoder"]["embed_tokens"]["embedding"].value
+                    )
 
-                params["model"]["decoder"]["embed_tokens"][
-                    "embedding"
-                ] = nn.LogicallyPartitioned(
-                    value=emb,
-                    names=model.params["model"]["decoder"]["embed_tokens"][
+                    params["model"]["decoder"]["embed_tokens"][
                         "embedding"
-                    ].names,
-                )
+                    ] = nn.LogicallyPartitioned(
+                        value=emb,
+                        names=model.params["model"]["decoder"]["embed_tokens"][
+                            "embedding"
+                        ].names,
+                    )
 
             model = model_cls(config, _do_init=False, dtype=dtype)
         else:
