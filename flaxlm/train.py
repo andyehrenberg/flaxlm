@@ -113,24 +113,21 @@ def train(_):
         num_train_steps,
     )
 
-    def run_eval(trainer, eval_data):
-        pass
-
     num_steps = 0
 
-    # eval_metrics = run_eval(trainer, eval_dataset)
-    # utils.log_metrics(eval_metrics, num_steps)
+    eval_metrics = trainer.run_eval(eval_dataset.set_epoch(None))
+    utils.log_metrics(eval_metrics, num_steps)
 
     for epoch in range(num_epochs):
         key, rng = jrandom.split(rng)
         for batch in train_dataset.set_epoch(key):
             t = time()
-            metrics = trainer.train_step(batch)
+            metrics = trainer.run_train(batch)
             t1 = time()
             num_steps += 1
             utils.log_metrics({**metrics, "step time": t1 - t}, num_steps)
-        # eval_metrics = run_eval(trainer, eval_dataset)
-        # utils.log_metrics(eval_metrics, num_steps)
+        eval_metrics = trainer.run_eval(eval_dataset.set_epoch(None))
+        utils.log_metrics(eval_metrics, num_steps)
 
     if jax.process_index() == 0:
         if save:

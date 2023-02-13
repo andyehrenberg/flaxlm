@@ -169,6 +169,7 @@ class Trainer:
                 )
             )
         )
+        self.eval = self.with_mesh(jax.jit(self.make_eval_step()))
 
     def with_mesh(self, f):
         def wrapper(*args, **kwargs):
@@ -266,6 +267,8 @@ class Trainer:
             def compute_loss(
                 params: FrozenDict, batch: Dict, dropout_rng: Array
             ) -> Scalar:
+                params = nn.with_logical_constraint(params, self.param_spec)
+
                 if self.model_config.is_encoder_decoder:
                     return encoder_decoder_loss_fn(
                         train_state.apply_fn,
@@ -428,7 +431,7 @@ class Trainer:
 
         return generate
 
-    def train_step(self, batch: Dict) -> Dict:
+    def run_train(self, batch: Dict) -> Dict:
         bs_shape = (self.per_node_per_grad_step_batch_size * self.node_groups,)
         if self.gradient_accumulation_steps > 1:
             # reshape data into (gradient_accumulation_steps, batch_per_node, ...)
@@ -443,3 +446,46 @@ class Trainer:
         self.train_state, metrics = self.train(self.train_state, batch)
 
         return metrics
+
+    def make_eval_step(self) -> Callable:
+        def eval_step(train_state: utils.TrainState, batch: Dict) -> Dict:
+            train_state = jax.lax.with_sharding_constraint(
+                train_state, self.mesh_train_state_spec
+            )
+
+            batch = nn.with_logical_constraint(batch, self.batch_spec)
+
+            def compute_loss(params: FrozenDict, batch: Dict) -> Scalar:
+                params = nn.with_logical_constraint(params, self.param_spec)
+
+                if self.model_config.is_encoder_decoder:
+                    return encoder_decoder_loss_fn(
+                        train_state.apply_fn,
+                        params,
+                        batch,
+                        False,
+                        None,
+                    )
+                else:
+                    return decoder_only_loss_fn(
+                        train_state.apply_fn,
+                        params,
+                        batch,
+                        False,
+                        None,
+                    )
+
+            loss, weight = compute_loss(train_state.params, batch)
+
+            return {"loss": loss, "weight": weight}
+
+        return eval_step
+
+    def run_eval(self, dataloader):
+        losses, weights = 0.0, 0.0
+        for batch in dataloader:
+            metrics = self.eval(self.train_state, batch)
+            losses += metrics["loss"] * metrics["weight"]
+            weights += metrics["weight"]
+
+        return {"eval loss": losses / weights}

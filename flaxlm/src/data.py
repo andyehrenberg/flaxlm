@@ -435,14 +435,22 @@ class PerHostDataset:
         check_inputs(self.sharded_dataset, self.global_data_shape, self.data_axes)
 
     def set_epoch(self, rng):
-        loader = data_loader(
-            self.sharded_dataset,
-            self.host_batch_size,
-            self.global_data_shape,
-            rng=rng,
-            shuffle=True,
-            max_steps=self._global_min_length,
-        )
+        if rng is not None:
+            loader = data_loader(
+                self.sharded_dataset,
+                self.host_batch_size,
+                self.global_data_shape,
+                rng=rng,
+                shuffle=True,
+                max_steps=self._global_min_length,
+            )
+        else:
+            loader = data_loader(
+                self.sharded_dataset,
+                self.host_batch_size,
+                self.global_data_shape,
+                max_steps=self._global_min_length,
+            )
 
         next_fn = partial(
             get_next_per_host,
