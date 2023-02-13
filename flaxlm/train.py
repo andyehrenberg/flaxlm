@@ -3,14 +3,14 @@ from absl import app, flags
 import jax
 import jax.random as jrandom
 from ml_collections import config_flags
+import transformers
+from time import time
 
 import flaxlm.src.data as data
 import flaxlm.src.mesh_utils as mesh_utils
 import flaxlm.src.partitioning_utils as partitioning_utils
 import flaxlm.src.trainer as flax_trainer
 import flaxlm.src.utils as utils
-
-import transformers
 
 config_flags.DEFINE_config_file("config")
 
@@ -124,9 +124,11 @@ def train(_):
     for epoch in range(num_epochs):
         key, rng = jrandom.split(rng)
         for batch in train_dataset.set_epoch(key):
+            t = time()
             metrics = trainer.train_step(batch)
+            t1 = time()
             num_steps += 1
-            utils.log_metrics(metrics, num_steps)
+            utils.log_metrics({**metrics, "step time": t1 - t}, num_steps)
         # eval_metrics = run_eval(trainer, eval_dataset)
         # utils.log_metrics(eval_metrics, num_steps)
 
