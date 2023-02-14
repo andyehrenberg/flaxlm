@@ -152,12 +152,7 @@ class Trainer:
         #        out_axis_resources=(self.mesh_train_state_spec, None)
         #    )
         #)
-        self.train = self.with_mesh(
-            jax.jit(
-                self.make_train_step(),
-                out_shardings=(self.mesh_train_state_spec, None)
-            )
-        )
+        self.train = self.make_train_step(),
 
         #self.generate = self.with_mesh(
         #    pjit.pjit(
@@ -168,27 +163,15 @@ class Trainer:
         #        out_axis_resources=nn.logical_to_mesh(self.batch_spec)
         #    )
         #)
-        self.generate = self.with_mesh(
-            jax.jit(
-                partial(
-                    self.make_generate(),
-                    max_new_tokens=self.max_generation_new_tokens,
-                ),
-                out_shardings=self.batch_spec
-            )
-        )
+        self.generate = self.make_generate(),
+
         #self.eval = self.with_mesh(
         #    pjit.pjit(
         #        self.make_eval_step(),
         #        out_axis_resources=None,
         #    )
         #)
-        self.eval = self.with_mesh(
-            jax.jit(
-                self.make_eval_step(),
-                out_axis_resources=None,
-            )
-        )
+        self.eval = self.make_eval_step(),
 
     def with_mesh(self, f):
         def wrapper(*args, **kwargs):
@@ -424,7 +407,11 @@ class Trainer:
 
             return new_train_state, metrics
 
-        return train_step
+        #return train_step
+        return jax.jit(
+            train_step,
+            out_shardings=(self.mesh_train_state_spec, None)
+        )
 
     def make_generate(self) -> Callable:
         def generate(
@@ -437,8 +424,12 @@ class Trainer:
                 train_state, self.mesh_train_state_spec
             )
 
+            #input_ids, attention_mask = jax.tree_util.tree_map(
+            #    lambda x: nn.with_logical_constraint(x, self.batch_spec),
+            #    (input_ids, attention_mask),
+            #)
             input_ids, attention_mask = jax.tree_util.tree_map(
-                lambda x: nn.with_logical_constraint(x, self.batch_spec),
+                lambda x: jax.lax.with_sharding_constraint(x, self.batch_spec),
                 (input_ids, attention_mask),
             )
 
@@ -449,11 +440,19 @@ class Trainer:
                 **kwargs,
             ).sequences
 
-            sequences = nn.with_logical_constraint(sequences, self.batch_spec)
+            #sequences = nn.with_logical_constraint(sequences, self.batch_spec)
+            sequences = jax.lax.with_sharding_constraint(sequences, self.batch_spec)
 
             return sequences
 
-        return generate
+        #return generate
+        return jax.jit(
+            partial(
+                generate,
+                max_new_tokens=self.max_generation_new_tokens,
+            ),
+            out_shardings=self.batch_spec
+        )
 
     def run_train(self, batch: Dict) -> Dict:
         self.train_state, metrics = self.train(self.train_state, batch)
@@ -467,10 +466,12 @@ class Trainer:
                 train_state, self.mesh_train_state_spec
             )
 
-            batch = nn.with_logical_constraint(batch, self.batch_spec)
+            #batch = nn.with_logical_constraint(batch, self.batch_spec)
+            batch = jax.lax.with_sharding_constraint(batch, self.batch_spec)
 
             def compute_loss(params: FrozenDict, batch: Dict) -> Scalar:
-                params = nn.with_logical_constraint(params, self.param_spec)
+                #params = nn.with_logical_constraint(params, self.param_spec)
+                params = jax.lax.with_sharding_constraint(params, self.mesh_param_spec)
 
                 if self.model_config.is_encoder_decoder:
                     return encoder_decoder_loss_fn(
@@ -493,7 +494,8 @@ class Trainer:
 
             return {"loss": loss, "weight": weight}
 
-        return eval_step
+        #return eval_step
+        return jax.jit(eval_step, out_shardings=None)
 
     def run_eval(self, dataloader):
         losses, weights = 0.0, 0.0
