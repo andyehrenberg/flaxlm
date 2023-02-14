@@ -1,6 +1,5 @@
-import functools
 import os
-from typing import Any, Callable, Sequence, Union
+from typing import Callable
 
 import flax
 import flax.core.frozen_dict as frozen_dict
@@ -9,10 +8,8 @@ import flax.serialization as serialization
 from flax.training import checkpoints, train_state
 import orbax.checkpoint as orbax
 import jax
-import jax.lax as lax
 import jax.numpy as jnp
 import ml_collections as mlc
-from chex import Array
 from jax.sharding import PartitionSpec
 import wandb
 

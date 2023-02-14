@@ -378,6 +378,7 @@ class Trainer:
         return generate
 
     def run_train(self, batch: Dict) -> Dict:
+        print(batch["input_ids"].addressable_shards)
         self.train_state, metrics = self.train(self.train_state, batch)
 
         return metrics
