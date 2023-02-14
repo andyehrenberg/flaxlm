@@ -23,8 +23,8 @@ def train(_):
     tokenizer_path = config.trainer_args.model_args.tokenizer_path
     model_cls = config.trainer_args.model_args.model_cls
     gradient_accumulation_steps = config.trainer_args.sampling_args.gradient_accumulation_steps
-
-    utils.init_logging(config)
+    if jax.process_index() == 0:
+        utils.init_logging(config)
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(tokenizer_path)
 
@@ -120,7 +120,8 @@ def train(_):
     num_steps = 0
 
     #eval_metrics = trainer.run_eval(eval_dataset.set_epoch(None))
-    #utils.log_metrics(eval_metrics, num_steps)
+    #if jax.process_index() == 0:
+        #utils.log_metrics(eval_metrics, num_steps)
 
     for epoch in range(num_epochs):
         key, rng = jrandom.split(rng)
@@ -131,7 +132,8 @@ def train(_):
             num_steps += 1
             utils.log_metrics({**metrics, "step time": t1 - t}, num_steps)
         eval_metrics = trainer.run_eval(eval_dataset.set_epoch(None))
-        utils.log_metrics(eval_metrics, num_steps)
+        if jax.process_index() == 0:
+            utils.log_metrics(eval_metrics, num_steps)
 
     if jax.process_index() == 0:
         if save:
