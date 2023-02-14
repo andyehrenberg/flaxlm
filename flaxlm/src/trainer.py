@@ -214,6 +214,7 @@ class Trainer:
             return train_state
 
         self.train_state = partitioned_create(params)
+        print(self.train_state.step.addressable_shards)
 
     def make_train_step(self) -> Callable:
         def train_step(
@@ -379,6 +380,7 @@ class Trainer:
 
     def run_train(self, batch: Dict) -> Dict:
         print(batch["input_ids"].addressable_shards)
+        print(self.train_state.step.addressable_shards)
         self.train_state, metrics = self.train(self.train_state, batch)
 
         return metrics
