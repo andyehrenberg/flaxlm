@@ -216,8 +216,8 @@ class Trainer:
 
         p_create_fn = pjit.pjit(
             create_fn,
-            in_axis_resources=nn.logical_to_mesh(self.param_spec),
-            out_axis_resources=self.mesh_train_state_spec,
+            in_shardings=(nn.logical_to_mesh(self.param_spec),),
+            out_shardings=self.mesh_train_state_spec,
         )
 
         with self.mesh:
