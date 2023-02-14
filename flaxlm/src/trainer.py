@@ -9,6 +9,7 @@ import flaxlm.src.partitioning_utils as partitioning_utils
 import flaxlm.src.utils as utils
 from chex import Array, Scalar
 from jax.sharding import Mesh, PartitionSpec
+from jax.experimental import pjit
 
 import flax.linen as nn
 from flax.core.frozen_dict import FrozenDict
@@ -205,6 +206,7 @@ class Trainer:
 
         @jax.jit
         def partitioned_create(params):
+            params = nn.with_logical_constraint(params, self.param_spec)
             train_state = create_fn(params)
             train_state = jax.lax.with_sharding_constraint(
                 train_state, self.mesh_train_state_spec
@@ -212,8 +214,15 @@ class Trainer:
 
             return train_state
 
+        p_create_fn = pjit.pjit(
+            create_fn,
+            in_axis_resources=self.mesh_train_state_spec.params,
+            out_axis_resources=self.mesh_train_state_spec,
+        )
+
         with self.mesh:
-            self.train_state = partitioned_create(params)
+            #self.train_state = partitioned_create(params)
+            self.train_state = p_create_fn(params)
         print(self.train_state.step.addressable_shards)
 
     def make_train_step(self) -> Callable:
