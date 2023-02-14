@@ -141,7 +141,15 @@ class Trainer:
         self.batch_spec = P("batch")
         self.grad_batch_spec = P(None, "batch")
 
-        self.train = self.with_mesh(jax.jit(self.make_train_step()))
+        self.train = self.with_mesh(
+            pjit.pjit(
+                self.make_train_step(),
+                in_axis_resources=(pjit.FROM_GDA, pjit.FROM_GDA),
+                out_axis_resources=(self.mesh_train_state_spec, None)
+            )
+        )
+
+        #self.train = self.with_mesh(jax.jit(self.make_train_step()))
         self.generate = self.with_mesh(
             jax.jit(
                 partial(
