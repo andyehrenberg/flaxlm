@@ -245,23 +245,6 @@ class Trainer:
                 train_state, self.mesh_train_state_spec
             )
 
-            if self.gradient_accumulation_steps > 1:
-                # reshape data into (gradient_accumulation_steps, batch_per_step, ...)
-
-                def reshape_for_accum(x):
-                    total_batch = x.shape[0]
-                    return x.reshape(
-                        (
-                            self.gradient_accumulation_steps,
-                            total_batch // self.gradient_accumulation_steps,
-                        ) + x.shape[1:]
-                    )
-
-                batch = jax.tree_util.tree_map(
-                    reshape_for_accum,
-                    batch,
-                )
-
             batch = nn.with_logical_constraint(
                 batch,
                 self.batch_spec

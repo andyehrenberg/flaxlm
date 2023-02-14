@@ -31,6 +31,7 @@ def data_loader(
     shuffle: bool = False,
     drop_last: bool = True,
     max_steps: int = None,
+    gradient_accumulation_steps: int = 1,
 ):
     # shape_dtypes is a Pytree of jax.ShapeDtypeStruct
     if shuffle:
@@ -57,6 +58,17 @@ def data_loader(
             shape_dtypes,
             batch,
         )
+
+        if gradient_accumulation_steps > 1:
+            batch = jax.tree_util.tree_map(
+                lambda x: x.reshape(
+                    (
+                        gradient_accumulation_steps,
+                        x[0] // gradient_accumulation_steps,
+                    ) + x.shape[1:]
+                ),
+                batch,
+            )
 
         yield batch
 
@@ -327,8 +339,6 @@ def get_next_per_host(
         )
         return global_array
 
-    # mesh_data_axes = nn.logical_to_mesh_axes(data_axes)
-
     global_arrays = jax.tree_map(
         form_global_array, local_data, global_data_shape, data_axes
     )
@@ -361,9 +371,11 @@ class PerHostDataset:
         decoder_max_len: Optional[int] = None,
         decoder_trunc_end: bool = True,
         decoder_prefix_str: Optional[str] = None,
+        gradient_accumulation_steps: int = 1,
     ):
         self.global_data_shape = global_data_shape
         self.global_mesh = global_mesh
+        self.gradient_accumulation_steps = gradient_accumulation_steps
         self.data_axes = nn.logical_to_mesh(data_axes)
 
         device_to_index = jax.tree_map(
@@ -444,6 +456,7 @@ class PerHostDataset:
                 rng=rng,
                 shuffle=True,
                 max_steps=self._global_min_length,
+                gradient_accumulation_steps=self.gradient_accumulation_steps,
             )
         else:
             loader = data_loader(
@@ -451,6 +464,7 @@ class PerHostDataset:
                 self.host_batch_size,
                 self.global_data_shape,
                 max_steps=self._global_min_length,
+                gradient_accumulation_steps=self.gradient_accumulation_steps,
             )
 
         next_fn = partial(

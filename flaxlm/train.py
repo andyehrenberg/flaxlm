@@ -22,6 +22,7 @@ def train(_):
     save_dir = config.trainer_args.output_dir
     tokenizer_path = config.trainer_args.model_args.tokenizer_path
     model_cls = config.trainer_args.model_args.model_cls
+    gradient_accumulation_steps = config.trainer_args.sampling_args.gradient_accumulation_steps
 
     utils.init_logging(config)
 
@@ -37,27 +38,30 @@ def train(_):
         config.trainer_args.parallelism_args
     )
 
-    _, batch_size, _, _ = partitioning_utils.convert_per_device_batch_size(
+    batch_size = partitioning_utils.convert_per_device_batch_size(
         config.trainer_args.sampling_args.per_device_batch_size,
         config.trainer_args.parallelism_args.mp_num,
-        config.trainer_args.sampling_args.gradient_accumulation_steps,
+        gradient_accumulation_steps,
     )
 
-    _, eval_batch_size, _, _ = partitioning_utils.convert_per_device_batch_size(
+    eval_batch_size = partitioning_utils.convert_per_device_batch_size(
         config.trainer_args.eval_args.per_device_eval_batch_size,
         config.trainer_args.parallelism_args.mp_num,
         1,
     )
 
-    train_shapes, eval_shapes, data_axes = utils.get_global_shape_dtypes(
-        batch_size, eval_batch_size, config.data_args
+    train_shapes, eval_shapes, train_axes, eval_axes = utils.get_global_shape_dtypes(
+        batch_size,
+        eval_batch_size,
+        config.data_args,
+        gradient_accumulation_steps,
     )
 
     train_dataset = data.PerHostDataset(
         dataset=config.data_args.train.dataset,
         global_data_shape=train_shapes,
         global_mesh=mesh,
-        data_axes=data_axes,
+        data_axes=train_axes,
         tokenizer=tokenizer,
         input_ids_column_name=config.data_args.train.input_ids_column_name,
         remove_columns=config.data_args.train.remove_columns,
@@ -82,7 +86,7 @@ def train(_):
         dataset=config.data_args.eval.dataset,
         global_data_shape=eval_shapes,
         global_mesh=mesh,
-        data_axes=data_axes,
+        data_axes=eval_axes,
         tokenizer=tokenizer,
         input_ids_column_name=config.data_args.eval.input_ids_column_name,
         remove_columns=config.data_args.eval.remove_columns,

@@ -133,18 +133,9 @@ def convert_per_device_batch_size(per_device_batch_size, mp_num, grad_accum_step
     )
     per_node_batch_size = per_node_per_grad_step_batch_size * grad_accum_steps
 
-    node_groups = max(1, mp_num // jax.local_device_count())
-
     batch_size = per_node_batch_size * jax.process_count()
 
-    loader_batch_size = per_node_batch_size * node_groups
-
-    return (
-        per_node_per_grad_step_batch_size,
-        batch_size,
-        loader_batch_size,
-        node_groups,
-    )
+    return batch_size
 
 
 # taken from https://github.com/stanford-crfm/levanter/blob/main/src/levanter/mesh.py

@@ -176,102 +176,134 @@ def restore_checkpoint(target, ckpt_dir, step=0):
     return restored
 
 
-def get_global_shape_dtypes(train_batch_size, eval_batch_size, data_args):
+def get_global_shape_dtypes(
+    train_batch_size, eval_batch_size, data_args, gradient_accumulation_steps=1
+):
     if data_args.mode == "clm":
         block_size = data_args.block_size
+        eval_dtype_struct = jax.ShapeDtypeStruct((eval_batch_size, block_size), "i4")
+        if gradient_accumulation_steps == 1:
+            train_dtype_struct = jax.ShapeDtypeStruct((train_batch_size, block_size), "i4")
+        else:
+            per_grad_step = train_batch_size // gradient_accumulation_steps
+            train_dtype_struct = jax.ShapeDtypeStruct(
+                (gradient_accumulation_steps, per_grad_step, block_size),
+                "i4",
+            )
         train_global_data_shape = {
-            "input_ids": jax.ShapeDtypeStruct((train_batch_size, block_size), "i4"),
-            "attention_mask": jax.ShapeDtypeStruct(
-                (train_batch_size, block_size), "i4"
-            ),
+            "input_ids": train_dtype_struct,
+            "attention_mask": train_dtype_struct,
         }
         eval_global_data_shape = {
-            "input_ids": jax.ShapeDtypeStruct((eval_batch_size, block_size), "i4"),
-            "attention_mask": jax.ShapeDtypeStruct((eval_batch_size, block_size), "i4"),
+            "input_ids": eval_dtype_struct,
+            "attention_mask": eval_dtype_struct,
         }
-        axes = {
-            "input_ids": P(
-                "batch",
-            ),
-            "attention_mask": P(
-                "batch",
-            ),
+        eval_axes = {
+            "input_ids": P("batch"),
+            "attention_mask": P("batch"),
         }
+        if gradient_accumulation_steps == 1:
+            train_axes = {
+                "input_ids": P("batch"),
+                "attention_mask": P("batch"),
+            }
+        else:
+            train_axes = {
+                "input_ids": P(None, "batch"),
+                "attention_mask": P(None, "batch"),
+            }
     elif data_args.mode == "seq2seq":
         input_ids_len = data_args.max_len
         if data_args.train.decoder_input_ids_column_name:
             decoder_ids_len = data_args.decoder_max_len
+            eval_encoder_dtype_struct = jax.ShapeDtypeStruct(
+                (eval_batch_size, input_ids_len), "i4"
+            )
+            eval_decoder_dtype_struct = jax.ShapeDtypeStruct(
+                (eval_batch_size, decoder_ids_len), "i4"
+            )
+            if gradient_accumulation_steps == 1:
+                train_encoder_dtype_struct = jax.ShapeDtypeStruct(
+                    (train_batch_size, input_ids_len), "i4"
+                )
+                train_decoder_dtype_struct = jax.ShapeDtypeStruct(
+                    (train_batch_size, decoder_ids_len), "i4"
+                )
+            else:
+                per_grad_step = train_batch_size // gradient_accumulation_steps
+                train_encoder_dtype_struct = jax.ShapeDtypeStruct(
+                    (gradient_accumulation_steps, train_batch_size, input_ids_len), "i4"
+                )
+                train_decoder_dtype_struct = jax.ShapeDtypeStruct(
+                    (gradient_accumulation_steps, train_batch_size, decoder_ids_len), "i4"
+                )
             train_global_data_shape = {
-                "input_ids": jax.ShapeDtypeStruct(
-                    (train_batch_size, input_ids_len), "i4"
-                ),
-                "attention_mask": jax.ShapeDtypeStruct(
-                    (train_batch_size, input_ids_len), "i4"
-                ),
-                "decoder_input_ids": jax.ShapeDtypeStruct(
-                    (train_batch_size, decoder_ids_len), "i4"
-                ),
-                "decoder_attention_mask": jax.ShapeDtypeStruct(
-                    (train_batch_size, decoder_ids_len), "i4"
-                ),
+                "input_ids": train_encoder_dtype_struct,
+                "attention_mask": train_encoder_dtype_struct,
+                "decoder_input_ids": train_decoder_dtype_struct,
+                "decoder_attention_mask": train_decoder_dtype_struct,
             }
             eval_global_data_shape = {
-                "input_ids": jax.ShapeDtypeStruct(
-                    (eval_batch_size, input_ids_len), "i4"
-                ),
-                "attention_mask": jax.ShapeDtypeStruct(
-                    (eval_batch_size, input_ids_len), "i4"
-                ),
-                "decoder_input_ids": jax.ShapeDtypeStruct(
-                    (eval_batch_size, decoder_ids_len), "i4"
-                ),
-                "decoder_attention_mask": jax.ShapeDtypeStruct(
-                    (eval_batch_size, decoder_ids_len), "i4"
-                ),
+                "input_ids": eval_encoder_dtype_struct,
+                "attention_mask": eval_encoder_dtype_struct,
+                "decoder_input_ids": eval_decoder_dtype_struct,
+                "decoder_attention_mask": eval_decoder_dtype_struct,
             }
-            axes = {
-                "input_ids": P(
-                    "batch",
-                ),
-                "attention_mask": P(
-                    "batch",
-                ),
-                "decoder_input_ids": P(
-                    "batch",
-                ),
-                "decoder_attention_mask": P(
-                    "batch",
-                ),
+            eval_axes = {
+                "input_ids": P("batch"),
+                "attention_mask": P("batch"),
+                "decoder_input_ids": P("batch"),
+                "decoder_attention_mask": P("batch"),
             }
+            if gradient_accumulation_steps == 1:
+                train_axes = {
+                    "input_ids": P("batch"),
+                    "attention_mask": P("batch"),
+                    "decoder_input_ids": P("batch"),
+                    "decoder_attention_mask": P("batch"),
+                }
+            else:
+                train_axes = {
+                    "input_ids": P(None, "batch"),
+                    "attention_mask": P(None, "batch"),
+                    "decoder_input_ids": P(None, "batch"),
+                    "decoder_attention_mask": P(None, "batch"),
+                }
         else:
+            eval_dtype_struct = jax.ShapeDtypeStruct(
+                (eval_batch_size, input_ids_len), "i4"
+            )
+            if gradient_accumulation_steps == 1:
+                train_dtype_struct = jax.ShapeDtypeStruct(
+                    (train_batch_size, input_ids_len), "i4"
+                )
+            else:
+                per_grad_step = train_batch_size // gradient_accumulation_steps
+                train_dtype_struct = jax.ShapeDtypeStruct(
+                    (gradient_accumulation_steps, train_batch_size, input_ids_len), "i4"
+                )
             train_global_data_shape = {
-                "input_ids": jax.ShapeDtypeStruct(
-                    (train_batch_size, input_ids_len), "i4"
-                ),
-                "attention_mask": jax.ShapeDtypeStruct(
-                    (train_batch_size, input_ids_len), "i4"
-                ),
+                "input_ids": train_dtype_struct,
+                "attention_mask": train_dtype_struct,
             }
             eval_global_data_shape = {
-                "input_ids": jax.ShapeDtypeStruct(
-                    (eval_batch_size, input_ids_len), "i4"
-                ),
-                "attention_mask": jax.ShapeDtypeStruct(
-                    (eval_batch_size, input_ids_len), "i4"
-                ),
+                "input_ids": eval_dtype_struct,
+                "attention_mask": eval_dtype_struct,
             }
-            axes = {
-                "input_ids": P(
-                    "batch",
-                ),
-                "attention_mask": P(
-                    "batch",
-                ),
-            }
+            if gradient_accumulation_steps == 1:
+                train_axes = {
+                    "input_ids": P("batch"),
+                    "attention_mask": P("batch"),
+                }
+            else:
+                train_axes = {
+                    "input_ids": P(None, "batch"),
+                    "attention_mask": P(None, "batch"),
+                }
     else:
         raise NotImplementedError("Mode can either be seq2seq or clm")
 
-    return train_global_data_shape, eval_global_data_shape, axes
+    return train_global_data_shape, eval_global_data_shape, train_axes, eval_axes
 
 
 def init_logging(config):
