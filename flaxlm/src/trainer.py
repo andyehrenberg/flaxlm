@@ -205,11 +205,6 @@ class Trainer:
             optax.adamw(learning_rate=schedule_fn),
         )
 
-        if self.half_precision and self.platform != "tpu":
-            dynamic_scale = utils.DynamicScale()
-        else:
-            dynamic_scale = utils.NoOp()
-
         params = partitioning_utils.shard_logically_partitioned_params(
             params, self.mesh
         )
@@ -221,7 +216,6 @@ class Trainer:
                 generate_fn=eval_model.generate,
                 params=params,
                 tx=tx,
-                dynamic_scale=dynamic_scale,
                 dropout_rng=dropout_rng,
             )
 
@@ -250,6 +244,23 @@ class Trainer:
             train_state = jax.lax.with_sharding_constraint(
                 train_state, self.mesh_train_state_spec
             )
+
+            if self.gradient_accumulation_steps > 1:
+                # reshape data into (gradient_accumulation_steps, batch_per_step, ...)
+
+                def reshape_for_accum(x):
+                    total_batch = x.shape[0]
+                    return x.reshape(
+                        (
+                            self.gradient_accumulation_steps,
+                            total_batch // self.gradient_accumulation_steps,
+                        ) + x.shape[1:]
+                    )
+
+                batch = jax.tree_util.tree_map(
+                    reshape_for_accum,
+                    batch,
+                )
 
             batch = nn.with_logical_constraint(
                 batch,
@@ -286,9 +297,7 @@ class Trainer:
                         dropout_rng,
                     )
 
-            dynamic_scale = train_state.dynamic_scale
-
-            grad_fn = dynamic_scale.value_and_grad(compute_loss, has_aux=True)
+            grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
 
             # inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
             def loss_and_grad(grad_idx, dropout_rng):
@@ -312,7 +321,6 @@ class Trainer:
                 loss, grads, weight, dropout_rng = loss_and_grad(
                     None, train_state.dropout_rng
                 )
-                dynamic_scale, finite = dynamic_scale.update(grads)
                 loss, grads = jax.tree_util.tree_map(
                     lambda x: x * weight, (loss, grads)
                 )
@@ -325,8 +333,6 @@ class Trainer:
                         self.param_spec,
                     ),
                     0.0,
-                    dynamic_scale,
-                    jnp.array(True),
                     train_state.dropout_rng,
                 )
 
@@ -334,11 +340,10 @@ class Trainer:
                 def cumul_minibatch_step(
                     grad_idx: Scalar, carry: Tuple[Scalar, FrozenDict, Scalar]
                 ) -> Tuple[Scalar, FrozenDict, Scalar]:
-                    loss, grads, weight, dynamic_scale, finite, dropout_rng = carry
+                    loss, grads, weight, dropout_rng = carry
                     sub_loss, sub_grads, sub_weight, dropout_rng = loss_and_grad(
                         grad_idx
                     )
-                    dynamic_scale, sub_finite = dynamic_scale.update(sub_grads)
                     sub_loss, sub_grads = jax.tree_util.tree_map(
                         lambda x: x * sub_weight, (sub_loss, sub_grads)
                     )
@@ -349,15 +354,12 @@ class Trainer:
                         (sub_loss, sub_grads, sub_weight),
                     )
                     grads = nn.with_logical_constraint(grads, self.param_spec)
-                    finite = finite & sub_finite
-                    return loss, grads, weight, dynamic_scale, finite, dropout_rng
+                    return loss, grads, weight, dropout_rng
 
                 (
                     loss,
                     grads,
                     weight,
-                    dynamic_scale,
-                    finite,
                     dropout_rng,
                 ) = jax.lax.fori_loop(
                     0,
@@ -380,26 +382,6 @@ class Trainer:
                 new_train_state, self.mesh_train_state_spec
             )
 
-            if self.half_precision:
-                new_train_state = new_train_state.replace(
-                    opt_state=jax.tree_util.tree_map(
-                        partial(jnp.where, finite),
-                        new_train_state.opt_state,
-                        train_state.opt_state,
-                    ),
-                    params=jax.tree_util.tree_map(
-                        partial(jnp.where, finite),
-                        new_train_state.params,
-                        train_state.params,
-                    ),
-                    dynamic_scale=dynamic_scale,
-                    dropout_rng=dropout_rng,
-                )
-
-            new_train_state = jax.lax.with_sharding_constraint(
-                new_train_state, self.mesh_train_state_spec
-            )
-
             return new_train_state, metrics
 
         return train_step
@@ -411,7 +393,9 @@ class Trainer:
             attention_mask: Array,
             **kwargs
         ):
-            train_state = nn.with_logical_constraint(train_state, self.train_state_spec)
+            train_state = jax.lax.with_sharding_constraint(
+                train_state, self.mesh_train_state_spec
+            )
 
             input_ids, attention_mask = jax.tree_util.tree_map(
                 lambda x: nn.with_logical_constraint(x, self.batch_spec),
@@ -443,14 +427,10 @@ class Trainer:
             batch,
         )
 
-        print(
-            self.train_state.opt_state[1][0].mu["decoder"]["block"]["1"]["layer"]["0"][
-                "SelfAttention"
-            ]["k"]["kernel"].value.addressable_shards
-        )
         print(self.train_state.step)
-        print(self.train_state.dynamic_scale)
         print(self.train_state.dropout_rng)
+        print(self.train_state.opt_state[1][0].count)
+        print(self.train_state.opt_state[1][-1])
 
         self.train_state, metrics = self.train(self.train_state, batch)
 
