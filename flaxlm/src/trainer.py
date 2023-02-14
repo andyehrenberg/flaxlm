@@ -399,21 +399,11 @@ class Trainer:
         return generate
 
     def run_train(self, batch: Dict) -> Dict:
-        bs_shape = (self.per_node_per_grad_step_batch_size * self.node_groups,)
-        if self.gradient_accumulation_steps > 1:
-            # reshape data into (gradient_accumulation_steps, batch_per_node, ...)
-            # to avoid any data redistribution when sharding
-            bs_shape = (self.gradient_accumulation_steps,) + bs_shape
-
-        batch = jax.tree_util.tree_map(
-            lambda x: x.reshape(bs_shape + x.shape[1:]),
-            batch,
-        )
-
         print(self.train_state.step)
         print(self.train_state.dropout_rng)
         print(self.train_state.opt_state[1][0].count)
         print(self.train_state.opt_state[1][-1])
+        print(jax.tree_util.tree_map(jnp.shape, self.train_state))
 
         self.train_state, metrics = self.train(self.train_state, batch)
 
