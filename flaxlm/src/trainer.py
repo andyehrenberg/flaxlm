@@ -244,9 +244,9 @@ class Trainer:
             out_axis_resources=self.mesh_train_state_spec,
         )
 
-        with self.mesh:
-            #self.train_state = partitioned_create(params)
-            self.train_state = p_create_fn(params)
+        #with self.mesh:
+        #    #self.train_state = partitioned_create(params)
+        self.train_state = p_create_fn(params)
         print(self.train_state.step.addressable_shards)
 
     def make_train_step(self) -> Callable:
