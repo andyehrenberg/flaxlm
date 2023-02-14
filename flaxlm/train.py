@@ -23,6 +23,9 @@ def train(_):
     tokenizer_path = config.trainer_args.model_args.tokenizer_path
     model_cls = config.trainer_args.model_args.model_cls
     gradient_accumulation_steps = config.trainer_args.sampling_args.gradient_accumulation_steps
+
+    jax.config.jax_jit_pjit_api_merge = True
+    
     if jax.process_index() == 0:
         utils.init_logging(config)
 

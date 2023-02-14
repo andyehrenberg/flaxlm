@@ -141,24 +141,35 @@ class Trainer:
         self.batch_spec = P("batch")
         self.grad_batch_spec = P(None, "batch")
 
+        #self.train = self.with_mesh(
+        #    pjit.pjit(
+        #        self.make_train_step(),
+        #        out_axis_resources=(self.mesh_train_state_spec, None)
+        #    )
+        #)
+
         self.train = self.with_mesh(
-            pjit.pjit(
+            jax.jit(
                 self.make_train_step(),
-                in_axis_resources=(pjit.FROM_GDA, pjit.FROM_GDA),
                 out_axis_resources=(self.mesh_train_state_spec, None)
             )
         )
 
-        #self.train = self.with_mesh(jax.jit(self.make_train_step()))
         self.generate = self.with_mesh(
             jax.jit(
                 partial(
                     self.make_generate(),
                     max_new_tokens=self.max_generation_new_tokens,
-                )
+                ),
+                out_axis_resources=nn.logical_to_mesh(self.batch_spec)
             )
         )
-        self.eval = self.with_mesh(jax.jit(self.make_eval_step()))
+        self.eval = self.with_mesh(
+            jax.jit(
+                self.make_eval_step(),
+                out_axis_resources=None,
+            )
+        )
 
     def with_mesh(self, f):
         def wrapper(*args, **kwargs):
@@ -214,7 +225,11 @@ class Trainer:
         self.param_spec = self.train_state_spec.params
         self.mesh_train_state_spec = nn.logical_to_mesh(self.train_state_spec)
 
-        @jax.jit
+        @partial(
+            jax.jit,
+            #in_shardings=(nn.logical_to_mesh(self.param_spec),),
+            out_axis_resources=self.mesh_train_state_spec,
+        )
         def partitioned_create(params):
             params = nn.with_logical_constraint(params, self.param_spec)
             train_state = create_fn(params)
@@ -224,9 +239,8 @@ class Trainer:
 
             return train_state
 
-        p_create_fn = pjit.pjit(
+        p_create_fn = jax.jit(
             create_fn,
-            in_axis_resources=(nn.logical_to_mesh(self.param_spec),),
             out_axis_resources=self.mesh_train_state_spec,
         )
 
