@@ -378,12 +378,6 @@ class Trainer:
         return generate
 
     def run_train(self, batch: Dict) -> Dict:
-        print(self.train_state.step)
-        print(self.train_state.dropout_rng)
-        print(self.train_state.opt_state[1][0].count)
-        print(self.train_state.opt_state[1][-1])
-        print(jax.tree_util.tree_map(jnp.shape, self.train_state))
-
         self.train_state, metrics = self.train(self.train_state, batch)
 
         return metrics
