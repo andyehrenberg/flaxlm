@@ -106,28 +106,7 @@ class Trainer:
         from_pt = args.model_args.from_pt
         gradient_checkpointing = args.model_args.gradient_checkpointing
 
-        self.per_device_batch_size = args.sampling_args.per_device_batch_size
-        self.per_device_eval_batch_size = args.eval_args.per_device_eval_batch_size
         self.max_generation_new_tokens = args.eval_args.max_generation_new_tokens
-
-        (
-            self.per_node_per_grad_step_batch_size,
-            self.batch_size,
-            self.loader_batch_size,
-            self.node_groups,
-        ) = partitioning_utils.convert_per_device_batch_size(
-            self.per_device_batch_size, self.mp_num, self.gradient_accumulation_steps
-        )
-
-        (
-            self.per_node_eval_batch_size,
-            self.eval_batch_size,
-            _,
-            _,
-        ) = partitioning_utils.convert_per_device_batch_size(
-            self.per_device_eval_batch_size, self.mp_num, 1
-        )
-        self.eval_loader_batch_size = self.eval_batch_size * self.node_groups
 
         self.platform = jax.local_devices()[0].platform
 
