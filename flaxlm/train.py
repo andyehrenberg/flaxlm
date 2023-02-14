@@ -1,6 +1,8 @@
 from absl import app, flags
 import os
 
+os.environ["JAX_JIT_PJIT_API_MERGE"] = '1'
+
 import jax
 import jax.random as jrandom
 from ml_collections import config_flags
@@ -24,8 +26,6 @@ def train(_):
     tokenizer_path = config.trainer_args.model_args.tokenizer_path
     model_cls = config.trainer_args.model_args.model_cls
     gradient_accumulation_steps = config.trainer_args.sampling_args.gradient_accumulation_steps
-
-    os.environ["JAX_JIT_PJIT_API_MERGE"] = '1'
 
     if jax.process_index() == 0:
         utils.init_logging(config)
