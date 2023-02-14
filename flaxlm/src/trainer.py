@@ -203,7 +203,6 @@ class Trainer:
         self.param_spec = self.train_state_spec.params
         self.mesh_train_state_spec = nn.logical_to_mesh(self.train_state_spec)
 
-        @self.with_mesh
         @jax.jit
         def partitioned_create(params):
             train_state = create_fn(params)
@@ -213,7 +212,8 @@ class Trainer:
 
             return train_state
 
-        self.train_state = partitioned_create(params)
+        with self.mesh:
+            self.train_state = partitioned_create(params)
         print(self.train_state.step.addressable_shards)
 
     def make_train_step(self) -> Callable:
@@ -379,8 +379,6 @@ class Trainer:
         return generate
 
     def run_train(self, batch: Dict) -> Dict:
-        print(batch["input_ids"].addressable_shards)
-        print(self.train_state.step.addressable_shards)
         self.train_state, metrics = self.train(self.train_state, batch)
 
         return metrics
