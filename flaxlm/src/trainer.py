@@ -109,6 +109,8 @@ class Trainer:
 
         self.max_generation_new_tokens = args.eval_args.max_generation_new_tokens
 
+        print(jax.config.jax_jit_pjit_api_merge)
+
         self.platform = jax.local_devices()[0].platform
 
         if self.half_precision:
@@ -216,8 +218,8 @@ class Trainer:
 
         p_create_fn = pjit.pjit(
             create_fn,
-            in_shardings=(nn.logical_to_mesh(self.param_spec),),
-            out_shardings=self.mesh_train_state_spec,
+            in_axis_resources=(nn.logical_to_mesh(self.param_spec),),
+            out_axis_resources=self.mesh_train_state_spec,
         )
 
         with self.mesh:

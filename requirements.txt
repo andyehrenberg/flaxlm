@@ -1,5 +1,5 @@
 datasets==2.8.0
-jax==0.4.2
+jax==0.4.3
 chex==0.1.6
 optax==0.1.4
 flax==0.6.4
