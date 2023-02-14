@@ -141,22 +141,15 @@ class Trainer:
         self.batch_spec = P("batch")
         self.grad_batch_spec = P(None, "batch")
 
-        #self.train = self.with_mesh(
-        #    pjit.pjit(
-        #        self.make_train_step(),
-        #        out_axis_resources=(self.mesh_train_state_spec, None)
-        #    )
-        #)
-
         self.train = self.with_mesh(
-            jax.jit(
+            pjit.pjit(
                 self.make_train_step(),
                 out_axis_resources=(self.mesh_train_state_spec, None)
             )
         )
 
         self.generate = self.with_mesh(
-            jax.jit(
+            pjit.pjit(
                 partial(
                     self.make_generate(),
                     max_new_tokens=self.max_generation_new_tokens,
@@ -165,7 +158,7 @@ class Trainer:
             )
         )
         self.eval = self.with_mesh(
-            jax.jit(
+            pjit.pjit(
                 self.make_eval_step(),
                 out_axis_resources=None,
             )
@@ -239,9 +232,11 @@ class Trainer:
 
             return train_state
 
-        p_create_fn = jax.jit(
-            create_fn,
-            out_axis_resources=self.mesh_train_state_spec,
+        p_create_fn = self.with_mesh(
+            pjit.pjit(
+                create_fn,
+                out_axis_resources=self.mesh_train_state_spec,
+            ),
         )
 
         #with self.mesh:
