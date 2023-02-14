@@ -3,27 +3,20 @@ from typing import Any, List, Optional, Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax.sharding import Mesh, NamedSharding
+from jax.sharding import Mesh
+import jax.experimental.multihost_utils as multihost_utils
 
 import flax.linen as nn
 
 
 def shard_logically_partitioned_params(params, mesh):
-    # Given params with LogicallyPartitioned axis metadata, partition them
-    return jax.tree_util.tree_map(
-        lambda x: nn.LogicallyPartitioned(
-            value=jax.device_put(
-                x.value, NamedSharding(mesh, nn.logical_to_mesh_axes(x.names))
-            ),
-            names=x.names,
-        ),
+    param_spec = nn.logical_to_mesh(nn.get_partition_spec(params))
+
+    return multihost_utils.host_local_array_to_global_array(
         params,
-        is_leaf=lambda x: isinstance(x, nn.LogicallyPartitioned),
+        global_mesh=mesh,
+        pspecs=param_spec,
     )
-
-
-def constraint_tree(tree, tree_spec):
-    tree = jax.tree_util.tree_map()
 
 
 def make_param_partitionable(param, mp_num, dim):
