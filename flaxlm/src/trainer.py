@@ -152,7 +152,7 @@ class Trainer:
         #        out_axis_resources=(self.mesh_train_state_spec, None)
         #    )
         #)
-        self.train = self.make_train_step(),
+        self.train = self.make_train_step()
 
         #self.generate = self.with_mesh(
         #    pjit.pjit(
@@ -163,7 +163,7 @@ class Trainer:
         #        out_axis_resources=nn.logical_to_mesh(self.batch_spec)
         #    )
         #)
-        self.generate = self.make_generate(),
+        self.generate = self.make_generate()
 
         #self.eval = self.with_mesh(
         #    pjit.pjit(
@@ -171,7 +171,7 @@ class Trainer:
         #        out_axis_resources=None,
         #    )
         #)
-        self.eval = self.make_eval_step(),
+        self.eval = self.make_eval_step()
 
     def with_mesh(self, f):
         def wrapper(*args, **kwargs):
