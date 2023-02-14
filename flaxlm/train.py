@@ -1,4 +1,5 @@
 from absl import app, flags
+import os
 
 import jax
 import jax.random as jrandom
@@ -24,8 +25,8 @@ def train(_):
     model_cls = config.trainer_args.model_args.model_cls
     gradient_accumulation_steps = config.trainer_args.sampling_args.gradient_accumulation_steps
 
-    jax.config.jax_jit_pjit_api_merge = True
-    
+    os.environ["JAX_JIT_PJIT_API_MERGE"] = 1
+
     if jax.process_index() == 0:
         utils.init_logging(config)
 
