@@ -241,9 +241,9 @@ class Trainer:
         def partitioned_create(params):
             params = jax.lax.with_sharding_constraint(params, self.mesh_param_spec)
             train_state = create_fn(params)
-            train_state = jax.lax.with_sharding_constraint(
-                train_state, self.mesh_train_state_spec
-            )
+            #train_state = jax.lax.with_sharding_constraint(
+            #    train_state, self.mesh_train_state_spec
+            #)
 
             return train_state
 
@@ -263,9 +263,9 @@ class Trainer:
             train_state: utils.TrainState, batch: Dict
         ) -> Tuple[utils.TrainState, Dict]:
             print("Compiling train step")
-            train_state = jax.lax.with_sharding_constraint(
-                train_state, self.mesh_train_state_spec
-            )
+            #train_state = jax.lax.with_sharding_constraint(
+            #    train_state, self.mesh_train_state_spec
+            #)
 
             # batch = nn.with_logical_constraint(
             #    batch,
@@ -407,9 +407,9 @@ class Trainer:
                 grads=grads, dropout_rng=dropout_rng
             )
 
-            new_train_state = jax.lax.with_sharding_constraint(
-                new_train_state, self.mesh_train_state_spec
-            )
+            #new_train_state = jax.lax.with_sharding_constraint(
+            #    new_train_state, self.mesh_train_state_spec
+            #)
 
             return new_train_state, metrics
 
@@ -425,9 +425,9 @@ class Trainer:
             attention_mask: Array,
             **kwargs
         ):
-            train_state = jax.lax.with_sharding_constraint(
-                train_state, self.mesh_train_state_spec
-            )
+            #train_state = jax.lax.with_sharding_constraint(
+            #    train_state, self.mesh_train_state_spec
+            #)
 
             # input_ids, attention_mask = jax.tree_util.tree_map(
             #    lambda x: nn.with_logical_constraint(x, self.batch_spec),
@@ -467,9 +467,9 @@ class Trainer:
     def make_eval_step(self) -> Callable:
         def eval_step(train_state: utils.TrainState, batch: Dict) -> Dict:
             print("Compiling eval step")
-            train_state = jax.lax.with_sharding_constraint(
-                train_state, self.mesh_train_state_spec
-            )
+            #train_state = jax.lax.with_sharding_constraint(
+            #    train_state, self.mesh_train_state_spec
+            #)
 
             # batch = nn.with_logical_constraint(batch, self.batch_spec)
             batch = jax.lax.with_sharding_constraint(batch, self.batch_spec)
