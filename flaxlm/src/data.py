@@ -65,7 +65,8 @@ def data_loader(
                     (
                         gradient_accumulation_steps,
                         x[0] // gradient_accumulation_steps,
-                    ) + x.shape[1:]
+                    )
+                    + x.shape[1:]
                 ),
                 batch,
             )

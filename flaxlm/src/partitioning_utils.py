@@ -3,10 +3,10 @@ from typing import Any, List, Optional, Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax.sharding import Mesh
+from jax.sharding import Mesh, PartitionSpec
 import jax.experimental.multihost_utils as multihost_utils
-
 import flax.linen as nn
+from flax.core.meta import Partitioned
 
 
 def shard_logically_partitioned_params(params, mesh):
@@ -17,6 +17,16 @@ def shard_logically_partitioned_params(params, mesh):
         global_mesh=mesh,
         pspecs=param_spec,
     )
+
+
+def get_partition_spec(tree):
+    def f(x):
+        if isinstance(x, Partitioned):
+            return x.get_partition_spec()
+        else:
+            return PartitionSpec(None)
+
+    return jax.tree_map(f, tree, is_leaf=lambda x: isinstance(x, Partitioned))
 
 
 def make_param_partitionable(param, mp_num, dim):

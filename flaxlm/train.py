@@ -1,7 +1,7 @@
 from absl import app, flags
 import os
 
-os.environ["JAX_JIT_PJIT_API_MERGE"] = '1'
+os.environ["JAX_JIT_PJIT_API_MERGE"] = "1"
 
 import jax
 import jax.random as jrandom
@@ -25,7 +25,9 @@ def train(_):
     save_dir = config.trainer_args.output_dir
     tokenizer_path = config.trainer_args.model_args.tokenizer_path
     model_cls = config.trainer_args.model_args.model_cls
-    gradient_accumulation_steps = config.trainer_args.sampling_args.gradient_accumulation_steps
+    gradient_accumulation_steps = (
+        config.trainer_args.sampling_args.gradient_accumulation_steps
+    )
 
     if jax.process_index() == 0:
         utils.init_logging(config)
@@ -123,9 +125,9 @@ def train(_):
 
     num_steps = 0
 
-    #eval_metrics = trainer.run_eval(eval_dataset.set_epoch(None))
-    #if jax.process_index() == 0:
-        #utils.log_metrics(eval_metrics, num_steps)
+    # eval_metrics = trainer.run_eval(eval_dataset.set_epoch(None))
+    # if jax.process_index() == 0:
+    # utils.log_metrics(eval_metrics, num_steps)
 
     for epoch in range(num_epochs):
         key, rng = jrandom.split(rng)

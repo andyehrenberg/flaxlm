@@ -139,22 +139,22 @@ class Trainer:
         self.setup_train_state(model, eval_model, params, dropout_rng)
         del params
 
-        #self.batch_spec = P("batch")
-        #self.grad_batch_spec = P(None, "batch")
+        # self.batch_spec = P("batch")
+        # self.grad_batch_spec = P(None, "batch")
         self.batch_spec = NamedSharding(self.mesh, nn.logical_to_mesh(P("batch")))
         self.grad_batch_spec = NamedSharding(
             self.mesh, nn.logical_to_mesh(P(None, "batch"))
         )
 
-        #self.train = self.with_mesh(
+        # self.train = self.with_mesh(
         #    pjit.pjit(
         #        self.make_train_step(),
         #        out_axis_resources=(self.mesh_train_state_spec, None)
         #    )
-        #)
+        # )
         self.train = self.make_train_step()
 
-        #self.generate = self.with_mesh(
+        # self.generate = self.with_mesh(
         #    pjit.pjit(
         #        partial(
         #           self.make_generate(),
@@ -162,15 +162,15 @@ class Trainer:
         #        ),
         #        out_axis_resources=nn.logical_to_mesh(self.batch_spec)
         #    )
-        #)
+        # )
         self.generate = self.make_generate()
 
-        #self.eval = self.with_mesh(
+        # self.eval = self.with_mesh(
         #    pjit.pjit(
         #        self.make_eval_step(),
         #        out_axis_resources=None,
         #    )
-        #)
+        # )
         self.eval = self.make_eval_step()
 
     def with_mesh(self, f):
@@ -223,14 +223,16 @@ class Trainer:
             )
 
         train_state_shape = jax.eval_shape(create_fn, params)
-        #self.train_state_spec = nn.get_partition_spec(train_state_shape)
+        # self.train_state_spec = nn.get_partition_spec(train_state_shape)
         self.mesh_train_state_spec = jax.tree_util.tree_map(
             lambda pspec: NamedSharding(self.mesh, pspec),
-            nn.logical_to_mesh(nn.get_partition_spec(train_state_shape)),
+            nn.logical_to_mesh(
+                partitioning_utils.get_partition_spec(train_state_shape)
+            ),
         )
         self.mesh_param_spec = self.mesh_train_state_spec.params
-        #self.param_spec = self.train_state_spec.params
-        #self.mesh_train_state_spec = nn.logical_to_mesh(self.train_state_spec)
+        # self.param_spec = self.train_state_spec.params
+        # self.mesh_train_state_spec = nn.logical_to_mesh(self.train_state_spec)
 
         @partial(
             jax.jit,
@@ -253,7 +255,7 @@ class Trainer:
         )
 
         self.train_state = partitioned_create(params)
-        #self.train_state = p_create_fn(params)
+        # self.train_state = p_create_fn(params)
         print(self.train_state.step.addressable_shards)
 
     def make_train_step(self) -> Callable:
@@ -265,12 +267,12 @@ class Trainer:
                 train_state, self.mesh_train_state_spec
             )
 
-            #batch = nn.with_logical_constraint(
+            # batch = nn.with_logical_constraint(
             #    batch,
             #    self.batch_spec
             #    if self.gradient_accumulation_steps == 1
             #    else self.grad_batch_spec,
-            #)
+            # )
             batch = jax.lax.with_sharding_constraint(
                 batch,
                 self.batch_spec
@@ -287,7 +289,7 @@ class Trainer:
             def compute_loss(
                 params: FrozenDict, batch: Dict, dropout_rng: Array
             ) -> Scalar:
-                #params = nn.with_logical_constraint(params, self.param_spec)
+                # params = nn.with_logical_constraint(params, self.param_spec)
                 params = jax.lax.with_sharding_constraint(params, self.mesh_param_spec)
 
                 if self.model_config.is_encoder_decoder:
@@ -315,7 +317,7 @@ class Trainer:
                     get_minibatch(batch, grad_idx) if grad_idx is not None else batch
                 )
 
-                #minibatch = nn.with_logical_constraint(minibatch, self.batch_spec)
+                # minibatch = nn.with_logical_constraint(minibatch, self.batch_spec)
                 minibatch = jax.lax.with_sharding_constraint(minibatch, self.batch_spec)
 
                 dropout_rng, _ = jrandom.split(dropout_rng)
@@ -324,7 +326,7 @@ class Trainer:
                     train_state.params, minibatch, dropout_rng
                 )
 
-                #grads = nn.with_logical_constraint(grads, self.param_spec)
+                # grads = nn.with_logical_constraint(grads, self.param_spec)
                 grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
 
                 return loss, grads, weight, dropout_rng
@@ -336,15 +338,15 @@ class Trainer:
                 loss, grads = jax.tree_util.tree_map(
                     lambda x: x * weight, (loss, grads)
                 )
-                #grads = nn.with_logical_constraint(grads, self.param_spec)
+                # grads = nn.with_logical_constraint(grads, self.param_spec)
                 grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
             else:
                 init_carry = (
                     0.0,
-                    #nn.with_logical_constraint(
+                    # nn.with_logical_constraint(
                     #    jax.tree_util.tree_map(jnp.zeros_like, train_state.params),
                     #    self.param_spec,
-                    #),
+                    # ),
                     jax.lax.with_sharding_constraint(
                         jax.tree_util.tree_map(jnp.zeros_like, train_state.params),
                         self.mesh_param_spec,
@@ -364,15 +366,19 @@ class Trainer:
                     sub_loss, sub_grads = jax.tree_util.tree_map(
                         lambda x: x * sub_weight, (sub_loss, sub_grads)
                     )
-                    #sub_grads = nn.with_logical_constraint(sub_grads, self.param_spec)
-                    sub_grads = jax.lax.with_sharding_constraint(sub_grads, self.mesh_param_spec)
+                    # sub_grads = nn.with_logical_constraint(sub_grads, self.param_spec)
+                    sub_grads = jax.lax.with_sharding_constraint(
+                        sub_grads, self.mesh_param_spec
+                    )
                     loss, grads, weight = jax.tree_util.tree_map(
                         jnp.add,
                         (loss, grads, weight),
                         (sub_loss, sub_grads, sub_weight),
                     )
-                    #grads = nn.with_logical_constraint(grads, self.param_spec)
-                    grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
+                    # grads = nn.with_logical_constraint(grads, self.param_spec)
+                    grads = jax.lax.with_sharding_constraint(
+                        grads, self.mesh_param_spec
+                    )
                     return loss, grads, weight, dropout_rng
 
                 (
@@ -386,7 +392,7 @@ class Trainer:
                     cumul_minibatch_step,
                     init_carry,
                 )
-                #grads = nn.with_logical_constraint(grads, self.param_spec)
+                # grads = nn.with_logical_constraint(grads, self.param_spec)
                 grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
 
             metrics = {"loss": loss}
@@ -394,7 +400,7 @@ class Trainer:
             grads, metrics = jax.tree_util.tree_map(
                 lambda x: x / weight, (grads, metrics)
             )
-            #grads = nn.with_logical_constraint(grads, self.param_spec)
+            # grads = nn.with_logical_constraint(grads, self.param_spec)
             grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
 
             new_train_state = train_state.apply_gradients(
@@ -407,10 +413,9 @@ class Trainer:
 
             return new_train_state, metrics
 
-        #return train_step
+        # return train_step
         return jax.jit(
-            train_step,
-            out_axis_resources=(self.mesh_train_state_spec, None)
+            train_step, out_axis_resources=(self.mesh_train_state_spec, None)
         )
 
     def make_generate(self) -> Callable:
@@ -424,10 +429,10 @@ class Trainer:
                 train_state, self.mesh_train_state_spec
             )
 
-            #input_ids, attention_mask = jax.tree_util.tree_map(
+            # input_ids, attention_mask = jax.tree_util.tree_map(
             #    lambda x: nn.with_logical_constraint(x, self.batch_spec),
             #    (input_ids, attention_mask),
-            #)
+            # )
             input_ids, attention_mask = jax.tree_util.tree_map(
                 lambda x: jax.lax.with_sharding_constraint(x, self.batch_spec),
                 (input_ids, attention_mask),
@@ -440,18 +445,18 @@ class Trainer:
                 **kwargs,
             ).sequences
 
-            #sequences = nn.with_logical_constraint(sequences, self.batch_spec)
+            # sequences = nn.with_logical_constraint(sequences, self.batch_spec)
             sequences = jax.lax.with_sharding_constraint(sequences, self.batch_spec)
 
             return sequences
 
-        #return generate
+        # return generate
         return jax.jit(
             partial(
                 generate,
                 max_new_tokens=self.max_generation_new_tokens,
             ),
-            out_axis_resources=self.batch_spec
+            out_axis_resources=self.batch_spec,
         )
 
     def run_train(self, batch: Dict) -> Dict:
@@ -466,11 +471,11 @@ class Trainer:
                 train_state, self.mesh_train_state_spec
             )
 
-            #batch = nn.with_logical_constraint(batch, self.batch_spec)
+            # batch = nn.with_logical_constraint(batch, self.batch_spec)
             batch = jax.lax.with_sharding_constraint(batch, self.batch_spec)
 
             def compute_loss(params: FrozenDict, batch: Dict) -> Scalar:
-                #params = nn.with_logical_constraint(params, self.param_spec)
+                # params = nn.with_logical_constraint(params, self.param_spec)
                 params = jax.lax.with_sharding_constraint(params, self.mesh_param_spec)
 
                 if self.model_config.is_encoder_decoder:
@@ -494,7 +499,7 @@ class Trainer:
 
             return {"loss": loss, "weight": weight}
 
-        #return eval_step
+        # return eval_step
         return jax.jit(eval_step, out_axis_resources=None)
 
     def run_eval(self, dataloader):

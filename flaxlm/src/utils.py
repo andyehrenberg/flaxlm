@@ -180,7 +180,9 @@ def get_global_shape_dtypes(
         block_size = data_args.block_size
         eval_dtype_struct = jax.ShapeDtypeStruct((eval_batch_size, block_size), "i4")
         if gradient_accumulation_steps == 1:
-            train_dtype_struct = jax.ShapeDtypeStruct((train_batch_size, block_size), "i4")
+            train_dtype_struct = jax.ShapeDtypeStruct(
+                (train_batch_size, block_size), "i4"
+            )
         else:
             per_grad_step = train_batch_size // gradient_accumulation_steps
             train_dtype_struct = jax.ShapeDtypeStruct(
@@ -232,7 +234,8 @@ def get_global_shape_dtypes(
                     (gradient_accumulation_steps, train_batch_size, input_ids_len), "i4"
                 )
                 train_decoder_dtype_struct = jax.ShapeDtypeStruct(
-                    (gradient_accumulation_steps, train_batch_size, decoder_ids_len), "i4"
+                    (gradient_accumulation_steps, train_batch_size, decoder_ids_len),
+                    "i4",
                 )
             train_global_data_shape = {
                 "input_ids": train_encoder_dtype_struct,
