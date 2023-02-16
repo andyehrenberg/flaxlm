@@ -24,7 +24,7 @@ def get_partition_spec(tree):
         if isinstance(x, Partitioned):
             return x.get_partition_spec()
         else:
-            return PartitionSpec(None)
+            return PartitionSpec()
 
     return jax.tree_map(f, tree, is_leaf=lambda x: isinstance(x, Partitioned))
 

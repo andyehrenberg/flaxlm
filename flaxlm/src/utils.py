@@ -21,19 +21,6 @@ class TrainState(train_state.TrainState):
     eval_apply_fn: Callable = flax.struct.field(pytree_node=False)
     generate_fn: Callable = flax.struct.field(pytree_node=False)
 
-    @classmethod
-    def create(cls, *, apply_fn, params, tx, **kwargs):
-        """Creates a new instance with `step=0` and initialized `opt_state`."""
-        opt_state = tx.init(params)
-        return cls(
-            step=jnp.array([0]),
-            apply_fn=apply_fn,
-            params=params,
-            tx=tx,
-            opt_state=opt_state,
-            **kwargs,
-        )
-
 
 def setup_model(
     model_cls,

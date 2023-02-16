@@ -12,7 +12,7 @@ from flax.core.frozen_dict import FrozenDict
 
 import flaxlm.src.partitioning_utils as partitioning_utils
 import flaxlm.src.utils as utils
-from flaxlm.src.optax_patch import lion
+from flaxlm.src.custom_optim import lion
 
 P = PartitionSpec
 
@@ -138,39 +138,16 @@ class Trainer:
 
         self.setup_train_state(model, eval_model, params, dropout_rng)
         del params
-
-        # self.batch_spec = P("batch")
-        # self.grad_batch_spec = P(None, "batch")
+        
         self.batch_spec = NamedSharding(self.mesh, nn.logical_to_mesh(P("batch")))
         self.grad_batch_spec = NamedSharding(
             self.mesh, nn.logical_to_mesh(P(None, "batch"))
         )
 
-        # self.train = self.with_mesh(
-        #    pjit.pjit(
-        #        self.make_train_step(),
-        #        out_axis_resources=(self.mesh_train_state_spec, None)
-        #    )
-        # )
         self.train = self.make_train_step()
 
-        # self.generate = self.with_mesh(
-        #    pjit.pjit(
-        #        partial(
-        #           self.make_generate(),
-        #            max_new_tokens=self.max_generation_new_tokens,
-        #        ),
-        #        out_axis_resources=nn.logical_to_mesh(self.batch_spec)
-        #    )
-        # )
         self.generate = self.make_generate()
 
-        # self.eval = self.with_mesh(
-        #    pjit.pjit(
-        #        self.make_eval_step(),
-        #        out_axis_resources=None,
-        #    )
-        # )
         self.eval = self.make_eval_step()
 
     def with_mesh(self, f):
