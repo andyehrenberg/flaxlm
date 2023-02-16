@@ -26,7 +26,7 @@ class TrainState(train_state.TrainState):
         """Creates a new instance with `step=0` and initialized `opt_state`."""
         opt_state = tx.init(params)
         return cls(
-            step=jnp.array(0),
+            step=jnp.array([0]),
             apply_fn=apply_fn,
             params=params,
             tx=tx,

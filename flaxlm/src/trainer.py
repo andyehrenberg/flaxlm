@@ -227,7 +227,7 @@ class Trainer:
         self.mesh_train_state_spec = jax.tree_util.tree_map(
             lambda pspec: NamedSharding(self.mesh, pspec),
             nn.logical_to_mesh(
-                partitioning_utils.get_partition_spec(train_state_shape)
+                nn.get_partition_spec(train_state_shape)
             ),
         )
         self.mesh_param_spec = self.mesh_train_state_spec.params
