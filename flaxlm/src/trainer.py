@@ -138,7 +138,7 @@ class Trainer:
 
         self.setup_train_state(model, eval_model, params, dropout_rng)
         del params
-        
+
         self.batch_spec = NamedSharding(self.mesh, nn.logical_to_mesh(P("batch")))
         self.grad_batch_spec = NamedSharding(
             self.mesh, nn.logical_to_mesh(P(None, "batch"))
@@ -352,7 +352,10 @@ class Trainer:
             return new_train_state, metrics
 
         return jax.jit(
-            train_step, out_axis_resources=(self.mesh_train_state_spec, None)
+            train_step, out_axis_resources=(
+                self.mesh_train_state_spec,
+                NamedSharding(self.mesh, P()),
+            )
         )
 
     def make_generate(self) -> Callable:
@@ -421,7 +424,7 @@ class Trainer:
 
             return {"loss": loss, "weight": weight}
 
-        return jax.jit(eval_step, out_axis_resources=None)
+        return jax.jit(eval_step, out_axis_resources=NamedSharding(self.mesh, P()))
 
     def run_eval(self, dataloader):
         losses, weights = 0.0, 0.0
