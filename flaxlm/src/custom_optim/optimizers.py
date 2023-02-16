@@ -7,9 +7,8 @@ import jax
 import jax.numpy as jnp
 import optax
 
-def _scale_by_learning_rate(
-    learning_rate, flip_sign=True
-):
+
+def _scale_by_learning_rate(learning_rate, flip_sign=True):
     m = -1 if flip_sign else 1
     if callable(learning_rate):
         return optax.scale_by_schedule(lambda count: m * learning_rate(count))
@@ -19,12 +18,13 @@ def _scale_by_learning_rate(
 def update_moment(updates, moments, decay, order):
     """Compute the exponential moving average of the `order`-th moment."""
     return jax.tree_util.tree_map(
-          lambda g, t: (1 - decay) * (g ** order) + decay * t, updates, moments
+        lambda g, t: (1 - decay) * (g**order) + decay * t, updates, moments
     )
 
 
 class ScaleByLionState(NamedTuple):
     """State for the Lion algorithm."""
+
     count: chex.Array  # shape=(), dtype=jnp.int32.
     mu: optax.Updates
 
@@ -46,7 +46,8 @@ def scale_by_lion(
 
     def init_fn(params):
         mu = jax.tree_util.tree_map(  # moment
-            lambda t: jnp.zeros_like(t, dtype=mu_dtype), params)
+            lambda t: jnp.zeros_like(t, dtype=mu_dtype), params
+        )
         return ScaleByLionState(count=jnp.zeros([], jnp.int32), mu=mu)
 
     def update_fn(updates, state, params=None):
@@ -55,7 +56,7 @@ def scale_by_lion(
         mu = jax.tree_map(lambda x: x.astype(mu_dtype), mu)
         count_inc = optax.safe_int32_increment(state.count)
         updates = jax.tree_util.tree_map(
-            lambda g, m: jnp.sign((1. - b1) * g + b1 * m), updates, state.mu
+            lambda g, m: jnp.sign((1.0 - b1) * g + b1 * m), updates, state.mu
         )
         return updates, ScaleByLionState(count=count_inc, mu=mu)
 

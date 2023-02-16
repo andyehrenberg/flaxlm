@@ -352,10 +352,11 @@ class Trainer:
             return new_train_state, metrics
 
         return jax.jit(
-            train_step, out_axis_resources=(
+            train_step,
+            out_axis_resources=(
                 self.mesh_train_state_spec,
                 NamedSharding(self.mesh, P()),
-            )
+            ),
         )
 
     def make_generate(self) -> Callable:
