@@ -2,7 +2,7 @@
 
 Training/fine-tuning language models with flexible, user-defined data and model parallelism using new parallelism features from Flax and JAX.
 
-Uses `nn.with_logical_partitioning` to give logical axis metadata to model parameters, and `nn.with_logical_constraint` to provide guidance to the compiler on how to shard data/parameters/optimizer states/gradients. Leverages the new parallelism capabilities of `jax.jit`.
+Uses `nn.with_logical_partitioning` to give logical axis metadata to model parameters, and `nn.logical_to_mesh`, combined with `jax.lax.with_sharding_constraint` to provide guidance to the compiler on how to shard data/parameters/optimizer states/gradients. Leverages the new parallelism capabilities of `jax.jit`.
 
 Supports pre-training/finetuning of GPT-J and OPT, and finetuning of T5.
 
