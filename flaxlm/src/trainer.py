@@ -12,7 +12,6 @@ from flax.core.frozen_dict import FrozenDict
 
 import flaxlm.src.partitioning_utils as partitioning_utils
 import flaxlm.src.utils as utils
-from flaxlm.src.custom_optim import lion
 
 P = PartitionSpec
 
@@ -99,7 +98,6 @@ class Trainer:
         self.warmup_steps = args.optimizer_args.warmup_steps
         self.max_grad_norm = args.optimizer_args.max_grad_norm
         self.use_dropout = args.optimizer_args.use_dropout
-        opt_name = args.optimizer_args.optim_type
         self.num_epochs = args.sampling_args.num_epochs
         pretrained_path = args.model_args.pretrained_model_name_or_path
         self.num_train_steps = num_train_steps
@@ -109,8 +107,6 @@ class Trainer:
         gradient_checkpointing = args.model_args.gradient_checkpointing
 
         self.max_generation_new_tokens = args.eval_args.max_generation_new_tokens
-
-        print(jax.config.jax_jit_pjit_api_merge)
 
         self.platform = jax.local_devices()[0].platform
 
@@ -137,7 +133,7 @@ class Trainer:
         )
         self.model_config = model.config
 
-        self.setup_train_state(model, eval_model, params, dropout_rng, opt_name)
+        self.setup_train_state(model, eval_model, params, dropout_rng)
         del params
 
         self.batch_spec = NamedSharding(self.mesh, nn.logical_to_mesh(P("batch")))
@@ -164,7 +160,6 @@ class Trainer:
         eval_model: Callable,
         params: FrozenDict,
         dropout_rng: Array,
-        opt_name: str,
     ) -> None:
         warmup_fn = optax.linear_schedule(
             init_value=0.0,
@@ -182,11 +177,9 @@ class Trainer:
             boundaries=[last_boundary],
         )
 
-        opt = lion if opt_name == "lion" else optax.adamw
-
         tx = optax.chain(
             optax.clip_by_global_norm(self.max_grad_norm),
-            opt(learning_rate=schedule_fn),
+            optax.adamw(learning_rate=schedule_fn),
         )
 
         params = partitioning_utils.shard_logically_partitioned_params(

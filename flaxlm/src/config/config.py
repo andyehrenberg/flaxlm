@@ -23,7 +23,6 @@ def get_config():
         gradient_accumulation_steps=1,
     )
     trainer_args.optimizer_args = dict(
-        optim_type="adam",
         lr_init=3e-4,
         warmup_steps=100,
         max_grad_norm=1.0,
