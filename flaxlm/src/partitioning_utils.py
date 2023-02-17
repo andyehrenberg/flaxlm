@@ -48,6 +48,7 @@ def make_param_partitionable(param, mp_num, dim):
     return new_param
 
 
+# taken from https://github.com/google-research/t5x/blob/main/t5x/partitioning.py
 def make_partitioning_rules(
     activation_partitioning_dims,
     parameter_partitioning_dims,
