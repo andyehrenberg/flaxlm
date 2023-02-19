@@ -8,6 +8,7 @@ import jax.random as jrandom
 from ml_collections import config_flags
 import transformers
 from time import time
+import flax.linen as nn
 
 import flaxlm.src.data as data
 import flaxlm.src.mesh_utils as mesh_utils
@@ -40,9 +41,10 @@ def train(_):
 
     rng = jrandom.PRNGKey(config.trainer_args.seed)
 
-    mesh = mesh_utils.setup_mesh_and_partitioning_rules(
+    mesh, param_rules, compute_rules = mesh_utils.setup_mesh_and_partitioning_rules(
         config.trainer_args.parallelism_args
     )
+    nn.set_logical_axis_rules(param_rules)
 
     batch_size = partitioning_utils.convert_per_device_batch_size(
         config.trainer_args.sampling_args.per_device_batch_size,
@@ -121,6 +123,8 @@ def train(_):
         config.trainer_args,
         mesh,
         num_train_steps,
+        param_rules,
+        compute_rules,
     )
 
     num_steps = 0

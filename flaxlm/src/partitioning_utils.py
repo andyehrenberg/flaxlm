@@ -3,10 +3,12 @@ from typing import Any, List, Optional, Tuple
 import jax
 import jax.numpy as jnp
 import numpy as np
-from jax.sharding import Mesh, PartitionSpec
+from jax.sharding import Mesh, PartitionSpec, NamedSharding
 import jax.experimental.multihost_utils as multihost_utils
 import flax.linen as nn
 from flax.core.meta import Partitioned
+
+P = PartitionSpec
 
 
 def shard_logically_partitioned_params(params, mesh):
@@ -24,7 +26,7 @@ def get_partition_spec(tree):
         if isinstance(x, Partitioned):
             return x.get_partition_spec()
         else:
-            return PartitionSpec()
+            return P()
 
     return jax.tree_map(f, tree, is_leaf=lambda x: isinstance(x, Partitioned))
 
@@ -62,7 +64,7 @@ def make_partitioning_rules(
     - Sequence of logical axis rules (`logical_name`, `shard_axis`) where dimensions of tensors annotated with `logical_name` will be sharded along `shard_axis`.
     """
     if activation_partitioning_dims == 0 and parameter_partitioning_dims == 0:
-        rules = (
+        param_rules = compute_rules = (
             ("batch", None),
             ("vocab", None),
             ("embed", None),
@@ -72,7 +74,7 @@ def make_partitioning_rules(
             ("joined_kv", None),
         )
     elif activation_partitioning_dims == 1 and parameter_partitioning_dims == 0:
-        rules = (
+        param_rules = compute_rules = (
             ("batch", "data"),
             ("vocab", None),
             ("embed", None),
@@ -82,7 +84,7 @@ def make_partitioning_rules(
             ("joined_kv", None),
         )
     elif activation_partitioning_dims == 1 and parameter_partitioning_dims == 1:
-        rules = (
+        param_rules = compute_rules = (
             ("batch", "data"),
             ("vocab", "model"),
             ("embed", None),
@@ -92,7 +94,7 @@ def make_partitioning_rules(
             ("joined_kv", "model"),
         )
     elif activation_partitioning_dims == 2 and parameter_partitioning_dims == 1:
-        rules = (
+        param_rules = compute_rules = (
             ("batch", "data"),
             ("vocab", "model"),
             ("mlp", "model"),
@@ -102,7 +104,7 @@ def make_partitioning_rules(
             ("embed", "model"),
         )
     elif activation_partitioning_dims == 1 and parameter_partitioning_dims == 2:
-        rules = (
+        param_rules = (
             ("batch", "data"),
             ("vocab", "model"),
             ("mlp", "model"),
@@ -111,8 +113,17 @@ def make_partitioning_rules(
             ("joined_kv", "model"),
             ("embed", "data"),
         )
+        compute_rules = (
+            ("batch", "data"),
+            ("vocab", "model"),
+            ("mlp", "model"),
+            ("heads", "model"),
+            ("kv", None),
+            ("joined_kv", "model"),
+            ("embed", None),
+        )
     elif activation_partitioning_dims == 2 and parameter_partitioning_dims == 2:
-        rules = (
+        param_rules = (
             ("batch", "data"),
             ("vocab", "model"),
             ("mlp", "model"),
@@ -122,12 +133,22 @@ def make_partitioning_rules(
             ("embed", "model"),
             ("embed", "data"),
         )
+        compute_rules = (
+            ("batch", "data"),
+            ("vocab", "model"),
+            ("mlp", "model"),
+            ("heads", "model"),
+            ("kv", None),
+            ("joined_kv", "model"),
+            ("embed", "model"),
+        )
 
     replicated_rules = (("length", None),)
 
-    rules += replicated_rules
+    compute_rules += replicated_rules
+    param_rules += replicated_rules
 
-    return rules
+    return param_rules, compute_rules
 
 
 # inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
@@ -202,3 +223,10 @@ def convert_global_batch_size(bsize: int, mesh: Mesh, dp_axis: int, mp_num: int)
         1, jax.local_device_count() // mp_num
     )
     return loader_batch_size, per_device_batch_size
+
+
+def with_logical_constraint(x, logical_axes, mesh):
+    sharding = NamedSharding(
+        mesh, nn.logical_to_mesh(logical_axes)
+    )
+    return jax.lax.with_sharding_constraint(x, sharding)
