@@ -302,21 +302,21 @@ class Trainer:
                     )
                 grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
             else:
-                with mesh_utils.axis_rules(self.compute_rules):
-                    init_carry = (
-                        0.0,
-                        jax.lax.with_sharding_constraint(
-                            jax.tree_util.tree_map(jnp.zeros_like, train_state.params),
-                            self.mesh_param_spec,
-                        ),
-                        0.0,
-                        train_state.dropout_rng,
-                    )
+                init_carry = (
+                    0.0,
+                    jax.lax.with_sharding_constraint(
+                        jax.tree_util.tree_map(jnp.zeros_like, train_state.params),
+                        self.mesh_param_spec,
+                    ),
+                    0.0,
+                    train_state.dropout_rng,
+                )
 
-                    # inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
-                    def cumul_minibatch_step(
-                        grad_idx: Scalar, carry: Tuple[Scalar, FrozenDict, Scalar]
-                    ) -> Tuple[Scalar, FrozenDict, Scalar]:
+                # inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
+                def cumul_minibatch_step(
+                    grad_idx: Scalar, carry: Tuple[Scalar, FrozenDict, Scalar]
+                ) -> Tuple[Scalar, FrozenDict, Scalar]:
+                    with mesh_utils.axis_rules(self.compute_rules):
                         loss, grads, weight, dropout_rng = carry
                         sub_loss, sub_grads, sub_weight, dropout_rng = loss_and_grad(
                             grad_idx
@@ -324,30 +324,30 @@ class Trainer:
                         sub_loss, sub_grads = jax.tree_util.tree_map(
                             lambda x: x * sub_weight, (sub_loss, sub_grads)
                         )
-                        sub_grads = jax.lax.with_sharding_constraint(
-                            sub_grads, self.mesh_param_spec
-                        )
-                        loss, grads, weight = jax.tree_util.tree_map(
-                            jnp.add,
-                            (loss, grads, weight),
-                            (sub_loss, sub_grads, sub_weight),
-                        )
-                        grads = jax.lax.with_sharding_constraint(
-                            grads, self.mesh_param_spec
-                        )
-                        return loss, grads, weight, dropout_rng
-
-                    (
-                        loss,
-                        grads,
-                        weight,
-                        dropout_rng,
-                    ) = jax.lax.fori_loop(
-                        0,
-                        self.gradient_accumulation_steps,
-                        cumul_minibatch_step,
-                        init_carry,
+                    sub_grads = jax.lax.with_sharding_constraint(
+                        sub_grads, self.mesh_param_spec
                     )
+                    loss, grads, weight = jax.tree_util.tree_map(
+                        jnp.add,
+                        (loss, grads, weight),
+                        (sub_loss, sub_grads, sub_weight),
+                    )
+                    grads = jax.lax.with_sharding_constraint(
+                        grads, self.mesh_param_spec
+                    )
+                    return loss, grads, weight, dropout_rng
+
+                (
+                    loss,
+                    grads,
+                    weight,
+                    dropout_rng,
+                ) = jax.lax.fori_loop(
+                    0,
+                    self.gradient_accumulation_steps,
+                    cumul_minibatch_step,
+                    init_carry,
+                )
                 grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
 
             metrics = {"loss": loss}
@@ -369,6 +369,7 @@ class Trainer:
                 self.mesh_train_state_spec,
                 NamedSharding(self.mesh, P()),
             ),
+            donate_argnums=(0,),
         )
 
     def make_generate(self) -> Callable:
