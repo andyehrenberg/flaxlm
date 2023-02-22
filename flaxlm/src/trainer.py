@@ -130,6 +130,7 @@ class Trainer:
             from_pt,
             self.dtype,
             gradient_checkpointing,
+            self.mesh,
         )
         self.model_config = model.config
 
