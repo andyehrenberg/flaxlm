@@ -25,7 +25,6 @@ class TrainState(train_state.TrainState):
 def setup_model(
     model_cls,
     pretrained_path,
-    mp_num,
     from_pt,
     dtype,
     gradient_checkpointing,
@@ -34,9 +33,15 @@ def setup_model(
     config=None,
 ):
     with jax.default_device(jax.devices("cpu")[0]):
+        dp_num, mp_num = mesh.device_ids.shape
+
         if not randomize:
             model = model_cls.from_pretrained(
-                pretrained_path, from_pt=from_pt, dtype=dtype, mesh=mesh,
+                pretrained_path,
+                from_pt=from_pt,
+                dtype=dtype,
+                mesh=mesh,
+                input_shape=(dp_num, 1),
             )
             params = model.params
             original_vocab = model.config.vocab_size
@@ -68,7 +73,9 @@ def setup_model(
                         ].names,
                     )
 
-            model = model_cls(config, _do_init=False, dtype=dtype, mesh=mesh)
+            model = model_cls(
+                config, _do_init=False, dtype=dtype, mesh=mesh, input_shape=(dp_num, 1)
+            )
         else:
             if not config:
                 model = model_cls.from_pretrained(pretrained_path, mesh=mesh)
@@ -82,13 +89,19 @@ def setup_model(
                 remainder = original_vocab % mp_num
                 config.vocab_size = original_vocab + mp_num - remainder
 
-            model = model_cls(config, dtype=dtype, mesh=mesh)
+            model = model_cls(config, dtype=dtype, mesh=mesh, input_shape=(dp_num, 1))
             params = model.params
 
         eval_model = (
             model
             if dtype == jnp.float32
-            else model_cls(config, _do_init=False, dtype=jnp.float32, mesh=mesh)
+            else model_cls(
+                config,
+                _do_init=False,
+                dtype=jnp.float32,
+                mesh=mesh,
+                input_shape=(dp_num, 1),
+            )
         )
         if config.vocab_size != original_vocab:
             model.config.suppress_tokens += list(

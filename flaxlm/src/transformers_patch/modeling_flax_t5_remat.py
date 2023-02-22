@@ -82,7 +82,7 @@ def shift_tokens_right(
 
 
 def mult_gather(weight, hidden_states):
-    weight = jax.lax.all_gather(weight, "data")
+    weight = jax.lax.all_gather(weight, "data", axis=0, tiled=True)
     return weight * hidden_states
 
 
@@ -98,12 +98,12 @@ class FlaxT5LayerNorm(nn.Module):
     weight_init: Callable[..., np.ndarray] = jax.nn.initializers.ones
 
     def setup(self):
-        names = ("embed",)
+        self.names = ("embed",)
         self.weight = self.param(
             "weight",
             nn.with_logical_partitioning(
                 self.weight_init,
-                names,
+                self.names,
             ),
             (self.hidden_size,),
         )
@@ -111,8 +111,8 @@ class FlaxT5LayerNorm(nn.Module):
         if mesh_axes[0] == "data":
             self.mult = shard_map.shard_map(
                 mult_gather,
-                in_shardings=(P("data"), P("data")),
-                out_shardings=P("data"),
+                in_specs=(P("data"), P("data")),
+                out_specs=P("data"),
                 mesh=self.mesh,
             )
         else:
@@ -1061,7 +1061,6 @@ T5_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
 
 class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
     """
