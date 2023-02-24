@@ -114,6 +114,7 @@ class FlaxT5LayerNorm(nn.Module):
                 in_specs=(P("data"), P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
+                check_rep=False,
             )
         else:
             self.mult = mult

@@ -142,6 +142,7 @@ class Dense(nn.Module):
                 in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
+                check_rep=False,
             )
         elif mesh_axes[1] == "data":
             dot_fn = shard_map.shard_map(
@@ -149,6 +150,7 @@ class Dense(nn.Module):
                 in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
+                check_rep=False,
             )
         else:
             dot_fn = lambda x, y: jnp.dot(y, x)
