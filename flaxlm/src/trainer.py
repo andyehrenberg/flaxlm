@@ -147,13 +147,6 @@ class Trainer:
 
         self.eval = self.make_eval_step()
 
-    def with_mesh(self, f):
-        def wrapper(*args, **kwargs):
-            with self.mesh:
-                return f(*args, **kwargs)
-
-        return wrapper
-
     def setup_train_state(
         self,
         model: Callable,
