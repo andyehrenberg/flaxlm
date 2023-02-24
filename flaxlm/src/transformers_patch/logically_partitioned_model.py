@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 import os
 from pickle import UnpicklingError
 
@@ -6,6 +6,7 @@ import msgpack.exceptions
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from jax.sharding import Mesh
 import numpy as np
 from flax.core.frozen_dict import unfreeze
 from flax.serialization import from_bytes
@@ -35,6 +36,7 @@ class LogicallyPartitionedModel(transformers.FlaxPreTrainedModel):
         cls,
         pretrained_model_name_or_path: str,
         dtype: jnp.dtype = jnp.float32,
+        mesh: Optional[Mesh] = None,
         *model_args,
         **kwargs,
     ):
@@ -284,7 +286,7 @@ class LogicallyPartitionedModel(transformers.FlaxPreTrainedModel):
             )
 
         # init random models
-        model = cls(config, *model_args, _do_init=_do_init, **model_kwargs)
+        model = cls(config, *model_args, _do_init=_do_init, mesh=mesh, **model_kwargs)
 
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(
