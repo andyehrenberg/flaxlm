@@ -1,7 +1,4 @@
 from absl import app, flags
-import os
-
-os.environ["JAX_JIT_PJIT_API_MERGE"] = "1"
 
 import jax
 import jax.random as jrandom
