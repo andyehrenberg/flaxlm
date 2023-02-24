@@ -347,6 +347,7 @@ class Trainer:
                 self.mesh_train_state_spec,
                 NamedSharding(self.mesh, P()),
             ),
+            donate_argnums=(0,),
         )
 
     def make_generate(self) -> Callable:
