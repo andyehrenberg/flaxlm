@@ -1132,10 +1132,13 @@ class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(
-            rngs,
-            *args,
-        )["params"]
+        def init_fn(rngs):
+            random_params = self.module.init(
+                rngs, *args
+            )["params"]
+            return random_params
+
+        random_params = jax.jit(init_fn)(rngs)
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -1233,14 +1236,18 @@ class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
                 **kwargs,
             )
 
-        init_variables = self.module.init(
-            jax.random.PRNGKey(0),
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            init_cache=True,
-            method=_decoder_forward,  # we only need to call the decoder to init the cache
-        )
+        def init_fn(rng):
+            return self.module.init(
+                rng,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                encoder_hidden_states=encoder_outputs[0],
+                init_cache=True,
+                method=_decoder_forward,  # we only need to call the decoder to init the cache
+            )
+
+        init_variables = jax.jit(init_fn)(jax.random.PRNGKey(0))
+        
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings(T5_ENCODE_INPUTS_DOCSTRING)
