@@ -234,6 +234,7 @@ class Embed(nn.Module):
                 in_specs=(P("data"), P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
+                check_rep=False,
             )
         elif mesh_axes[1] == "data":
             self.embed_fn = shard_map.shard_map(
@@ -241,6 +242,7 @@ class Embed(nn.Module):
                 in_specs=(P(None, "data"), P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
+                check_rep=False,
             )
         else:
             self.embed_fn = partial(jnp.take, axis=0)
