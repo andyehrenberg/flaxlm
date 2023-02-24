@@ -181,7 +181,9 @@ def take_gather_0(embedding, inputs):
         axis=0,
         tiled=True,
     )
-    return jnp.take(gathered, inputs, axis=0)
+    inputs = jax.nn.one_hot(inputs, gathered.shape[0])
+
+    return jnp.dot(inputs, gathered)
 
 
 def take_gather_1(embedding, inputs):
@@ -191,7 +193,9 @@ def take_gather_1(embedding, inputs):
         axis=1,
         tiled=True,
     )
-    return jnp.take(gathered, inputs, axis=0)
+    inputs = jax.nn.one_hot(inputs, gathered.shape[0])
+
+    return jnp.dot(inputs, gathered)
 
 
 class Embed(nn.Module):
