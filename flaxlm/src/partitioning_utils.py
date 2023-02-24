@@ -227,6 +227,6 @@ def convert_global_batch_size(bsize: int, mesh: Mesh, dp_axis: int, mp_num: int)
 
 def with_logical_constraint(x, logical_axes, mesh):
     sharding = NamedSharding(
-        mesh, nn.logical_to_mesh(logical_axes)
+        mesh, nn.logical_to_mesh_axes(logical_axes)
     )
     return jax.lax.with_sharding_constraint(x, sharding)

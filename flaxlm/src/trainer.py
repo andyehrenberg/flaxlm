@@ -206,7 +206,7 @@ class Trainer:
                 tx=tx,
                 dropout_rng=dropout_rng,
             )
-
+        
         train_state_shape = jax.eval_shape(create_fn, params)
 
         self.train_state_spec = partitioning_utils.get_partition_spec(train_state_shape)
