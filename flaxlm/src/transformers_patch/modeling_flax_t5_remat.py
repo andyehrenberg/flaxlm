@@ -118,7 +118,6 @@ class FlaxT5LayerNorm(nn.Module):
         else:
             self.mult = mult
 
-
     def __call__(self, hidden_states):
         """
         Construct a layernorm module in the T5 style; No bias and no subtraction of mean.
@@ -222,10 +221,15 @@ class FlaxT5LayerFF(nn.Module):
                 self.config, dtype=self.dtype, mesh=self.mesh
             )
         else:
-            self.DenseReluDense = FlaxT5DenseActDense(self.config, dtype=self.dtype, mesh=self.mesh)
+            self.DenseReluDense = FlaxT5DenseActDense(
+                self.config, dtype=self.dtype, mesh=self.mesh
+            )
 
         self.layer_norm = FlaxT5LayerNorm(
-            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype, mesh=self.mesh
+            self.config.d_model,
+            eps=self.config.layer_norm_epsilon,
+            dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -610,7 +614,10 @@ class FlaxT5LayerSelfAttention(nn.Module):
             mesh=self.mesh,
         )
         self.layer_norm = FlaxT5LayerNorm(
-            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype, mesh=self.mesh
+            self.config.d_model,
+            eps=self.config.layer_norm_epsilon,
+            dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -655,7 +662,10 @@ class FlaxT5LayerCrossAttention(nn.Module):
             mesh=self.mesh,
         )
         self.layer_norm = FlaxT5LayerNorm(
-            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype, mesh=self.mesh
+            self.config.d_model,
+            eps=self.config.layer_norm_epsilon,
+            dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -705,12 +715,19 @@ class FlaxT5Block(nn.Module):
         feed_forward_index = 1
         if self.causal:
             self.layer += (
-                FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype, mesh=self.mesh),
+                FlaxT5LayerCrossAttention(
+                    self.config, name=str(1), dtype=self.dtype, mesh=self.mesh
+                ),
             )
             feed_forward_index += 1
 
         self.layer += (
-            FlaxT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype, mesh=self.mesh),
+            FlaxT5LayerFF(
+                self.config,
+                name=str(feed_forward_index),
+                dtype=self.dtype,
+                mesh=self.mesh,
+            ),
         )
 
     def __call__(
@@ -898,9 +915,14 @@ class FlaxT5Stack(nn.Module):
     def setup(self):
         self.causal = self.config.causal
 
-        self.block = FlaxT5BlockCollection(self.config, dtype=self.dtype, mesh=self.mesh)
+        self.block = FlaxT5BlockCollection(
+            self.config, dtype=self.dtype, mesh=self.mesh
+        )
         self.final_layer_norm = FlaxT5LayerNorm(
-            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype, mesh=self.mesh
+            self.config.d_model,
+            eps=self.config.layer_norm_epsilon,
+            dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -1061,6 +1083,7 @@ T5_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
 
 class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
     """
@@ -1442,7 +1465,9 @@ class FlaxT5Module(nn.Module):
         self.shared = Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            embedding_init=jax.nn.initializers.normal(
+                self.config.initializer_factor * 1.0
+            ),
             dtype=self.dtype,
             names=("vocab", "embed"),
             mesh=self.mesh,
@@ -1562,7 +1587,9 @@ class FlaxT5EncoderModule(nn.Module):
         self.shared = Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            embedding_init=jax.nn.initializers.normal(
+                self.config.initializer_factor * 1.0
+            ),
             dtype=self.dtype,
             names=("vocab", "embed"),
             mesh=self.mesh,
@@ -1676,13 +1703,17 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         encoder_config.causal = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxT5Stack(encoder_config, self.shared, dtype=self.dtype, mesh=self.mesh)
+        self.encoder = FlaxT5Stack(
+            encoder_config, self.shared, dtype=self.dtype, mesh=self.mesh
+        )
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxT5Stack(decoder_config, self.shared, dtype=self.dtype, mesh=self.mesh)
+        self.decoder = FlaxT5Stack(
+            decoder_config, self.shared, dtype=self.dtype, mesh=self.mesh
+        )
 
         self.lm_head = Dense(
             self.config.vocab_size,
