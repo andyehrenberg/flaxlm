@@ -151,9 +151,9 @@ class Dense(nn.Module):
                 mesh=self.mesh,
             )
         else:
-            dot_fn = jnp.dot
+            dot_fn = lambda x, y: jnp.dot(y, x)
 
-        y = dot_fn(inputs, kernel)
+        y = dot_fn(kernel, inputs)
 
         if bias is not None:
             if mesh_axes[1] == "data":
