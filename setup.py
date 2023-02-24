@@ -11,7 +11,7 @@ from version import __version__
 with open('README.md') as fp:
     long_description = fp.read()
 
-_jax_version = '0.4.2'
+_jax_version = '0.4.4'
 
 with open("requirements.txt", "r") as f:
     requirements = [line for line in f.readlines() if line[0] != "#"]
