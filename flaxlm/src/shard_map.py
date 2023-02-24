@@ -8,14 +8,11 @@ from flax.linen.dtypes import promote_dtype
 import jax
 from jax import lax
 import jax.experimental.shard_map as shard_map
-import jax.random as jrandom
 import jax.numpy as jnp
-from jax.sharding import Mesh, PartitionSpec, NamedSharding
+from jax.sharding import Mesh, PartitionSpec
+
 
 P = PartitionSpec
-
-import numpy as np
-
 
 PRNGKey = Any
 Shape = Tuple[int, ...]
@@ -259,136 +256,3 @@ class Embed(nn.Module):
         # work correctly.
         (embedding,) = promote_dtype(self.embedding, dtype=self.dtype, inexact=False)
         return self.embed_fn(embedding, inputs)
-
-
-if __name__ == "__main__":
-    import flax.training.train_state as train_state
-    import optax
-    from flax.core.meta import Partitioned
-
-    TrainState = train_state.TrainState
-
-    mesh = Mesh(np.array(jax.devices()).reshape(8, 1), ("data", "model"))
-
-    nn.set_logical_axis_rules(
-        (
-            ("batch", "data"),
-            ("shard", "data"),
-            ("no_shard", None),
-        )
-    )
-
-    model = Dense(
-        128,
-        use_bias=False,
-        kernel_init=default_kernel_init,
-        names=("shard", "no_shard"),
-    )
-
-    rng = jrandom.PRNGKey(2)
-
-    def init_fn(x):
-        return model.init(rng, x)["params"]
-
-    param_shapes = jax.eval_shape(init_fn, jnp.ones((8, 64, 256)))
-    mesh_param_spec = jax.tree_util.tree_map(
-        lambda pspec: NamedSharding(mesh, pspec),
-        nn.logical_to_mesh(nn.get_partition_spec(param_shapes)),
-    )
-
-    params = jax.jit(init_fn, out_shardings=mesh_param_spec)(jnp.ones((8, 64, 256)))
-
-    def apply_fn(params, x):
-        return model.apply({"params": params}, x)
-
-    warmup_fn = optax.linear_schedule(
-        init_value=0.0,
-        end_value=1e-4,
-        transition_steps=50,
-    )
-    decay_fn = optax.linear_schedule(
-        init_value=1e-4,
-        end_value=0.0,
-        transition_steps=100 - 50,
-    )
-    last_boundary = 50
-    schedule_fn = optax.join_schedules(
-        schedules=[warmup_fn, decay_fn],
-        boundaries=[last_boundary],
-    )
-
-    tx = optax.chain(
-        optax.clip_by_global_norm(1.0),
-        optax.adamw(learning_rate=schedule_fn),
-    )
-
-    def create_state(params):
-        return TrainState.create(params=params, tx=tx, apply_fn=apply_fn)
-
-    def get_partition_spec(tree):
-        def f(x):
-            if isinstance(x, Partitioned):
-                return x.get_partition_spec()
-            else:
-                return P()
-
-        return jax.tree_map(f, tree, is_leaf=lambda x: isinstance(x, Partitioned))
-
-    train_state_shapes = jax.eval_shape(create_state, params)
-    mesh_train_state_spec = jax.tree_util.tree_map(
-        lambda pspec: NamedSharding(mesh, pspec),
-        nn.logical_to_mesh(get_partition_spec(train_state_shapes)),
-    )
-    mesh_param_spec = mesh_train_state_spec.params
-
-    def create_fn(params):
-        params = jax.lax.with_sharding_constraint(params, mesh_param_spec)
-        return create_state(params)
-
-    train_state = jax.jit(create_fn, out_shardings=mesh_train_state_spec)(params)
-
-    def compute_loss(params, x, y):
-        out = apply_fn(params, x)
-        loss = (y - out) ** 2
-        return jnp.mean(loss)
-
-    grad_fn = jax.value_and_grad(compute_loss)
-
-    @partial(
-        jax.jit,
-        out_shardings=(mesh_train_state_spec, NamedSharding(mesh, P())),
-        donate_argnums=(0,),
-    )
-    def train_step(train_state, batch):
-        with jax.named_scope("grads"):
-            loss, grads = grad_fn(
-                lax.with_sharding_constraint(train_state.params, mesh_param_spec),
-                batch["x"],
-                batch["y"],
-            )
-
-        grads = lax.with_sharding_constraint(grads, mesh_param_spec)
-
-        with jax.named_scope("update"):
-            new_train_state = train_state.apply_gradients(grads=grads)
-
-        return new_train_state, loss
-
-    import time
-
-    x = jax.device_put(jnp.ones((8, 64, 256)), NamedSharding(mesh, P("data")))
-    y = jax.device_put(
-        jrandom.uniform(rng, (8, 64, 128)), NamedSharding(mesh, P("data"))
-    )
-
-    times = []
-
-    train_state, l = train_step(train_state, {"x": x, "y": y})
-
-    for i in range(100):
-        t = time.time()
-        train_state, l = train_step(train_state, {"x": x, "y": y})
-        t1 = time.time()
-        times.append(t1 - t)
-
-    print(np.mean(times))
