@@ -139,27 +139,21 @@ class Dense(nn.Module):
         if mesh_axes[0] == "data":
             dot_fn = shard_map.shard_map(
                 dot_gather_0,
-                in_specs=(
-                    P("data"),
-                    P("data"),
-                ),
+                in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
             )
         elif mesh_axes[1] == "data":
             dot_fn = shard_map.shard_map(
                 dot_gather_1,
-                in_specs=(
-                    P(None, "data"),
-                    P("data"),
-                ),
+                in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
             )
         else:
             dot_fn = jnp.dot
 
-        y = dot_fn(kernel, inputs)
+        y = dot_fn(inputs, kernel)
 
         if bias is not None:
             if mesh_axes[1] == "data":
@@ -231,7 +225,7 @@ class Embed(nn.Module):
         if mesh_axes[0] == "data":
             self.embed_fn = shard_map.shard_map(
                 take_gather_0,
-                in_specs=(P("data"), P("data")),
+                in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
                 check_rep=False,
@@ -239,7 +233,7 @@ class Embed(nn.Module):
         elif mesh_axes[1] == "data":
             self.embed_fn = shard_map.shard_map(
                 take_gather_1,
-                in_specs=(P(None, "data"), P("data")),
+                in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
                 check_rep=False,
