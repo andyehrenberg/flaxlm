@@ -208,7 +208,7 @@ class Trainer:
 
         @partial(
             jax.jit,
-            out_axis_resources=self.mesh_train_state_spec,
+            out_shardings=self.mesh_train_state_spec,
         )
         def partitioned_create(params):
             params = jax.lax.with_sharding_constraint(params, self.mesh_param_spec)
@@ -350,7 +350,7 @@ class Trainer:
 
         return jax.jit(
             train_step,
-            out_axis_resources=(
+            out_shardings=(
                 self.mesh_train_state_spec,
                 NamedSharding(self.mesh, P()),
             ),
@@ -384,7 +384,7 @@ class Trainer:
                 generate,
                 max_new_tokens=self.max_generation_new_tokens,
             ),
-            out_axis_resources=self.batch_spec,
+            out_shardings=self.batch_spec,
         )
 
     def run_train(self, batch: Dict) -> Dict:
@@ -422,7 +422,7 @@ class Trainer:
 
             return {"loss": loss, "weight": weight}
 
-        return jax.jit(eval_step, out_axis_resources=NamedSharding(self.mesh, P()))
+        return jax.jit(eval_step, out_shardings=NamedSharding(self.mesh, P()))
 
     def run_eval(self, dataloader):
         losses, weights = 0.0, 0.0
