@@ -265,6 +265,53 @@ def take_gather_0(embedding, inputs):
     return jnp.dot(inputs, gathered)
 
 
+def take_gather_accum_0(kernel, inputs):
+    axis_size = lax.psum(1, axis_name="data")
+    axis_index = lax.axis_index(axis_name="data")
+    chunk_size = kernel.shape[0]
+
+    inputs = jax.nn.one_hot(inputs, chunk_size * axis_size)
+
+    def f(i, carrys):
+        accum, kernel = carrys
+        x = lax.dynamic_slice(
+            inputs,
+            (0, 0, ((axis_index + i) % axis_size) * chunk_size),
+            (inputs.shape[0], inputs.shape[1], chunk_size),
+        )
+
+        update = jnp.dot(x, kernel)
+
+        kernel = lax.ppermute(
+            kernel,
+            axis_name="data",
+            perm=[(j, (j - 1) % axis_size) for j in range(axis_size)],
+        )
+
+        accum = accum + update
+
+        return accum, kernel
+
+    accum = jnp.zeros(
+        (inputs.shape[0], inputs.shape[1], kernel.shape[1]), dtype=kernel.dtype
+    )
+    # accum, kernel = jax.lax.fori_loop(0, axis_size - 1, f, (accum, kernel))
+    for i in range(0, axis_size - 1):
+        accum, kernel = f(i, (accum, kernel))
+
+    i = axis_size - 1
+    x = lax.dynamic_slice(
+        inputs,
+        (0, 0, ((axis_index + i) % axis_size) * chunk_size),
+        (inputs.shape[0], inputs.shape[1], chunk_size),
+    )
+    update = jnp.dot(x, kernel)
+
+    accum = accum + update
+
+    return accum
+
+
 def take_gather_1(embedding, inputs):
     gathered = lax.all_gather(
         embedding,
@@ -275,6 +322,45 @@ def take_gather_1(embedding, inputs):
     inputs = jax.nn.one_hot(inputs, gathered.shape[0])
 
     return jnp.dot(inputs, gathered)
+
+
+def take_gather_accum_1(kernel, inputs):
+    axis_size = lax.psum(1, axis_name="data")
+    axis_index = lax.axis_index(axis_name="data")
+    chunk_size = kernel.shape[1]
+
+    inputs = jax.nn.one_hot(inputs, kernel.shape[0])
+
+    def f(i, carrys):
+        accum, kernel = carrys
+
+        update = jnp.dot(inputs, kernel)
+
+        kernel = lax.ppermute(
+            kernel,
+            axis_name="data",
+            perm=[(j, (j - 1) % axis_size) for j in range(axis_size)],
+        )
+
+        update_index = (0, 0, ((axis_index + i) % axis_size) * chunk_size)
+        accum = lax.dynamic_update_slice(accum, update, update_index)
+
+        return accum, kernel
+
+    accum = jnp.zeros(
+        (inputs.shape[0], inputs.shape[1], chunk_size * axis_size), dtype=kernel.dtype
+    )
+    # accum, kernel = jax.lax.fori_loop(0, axis_size - 1, f, (accum, kernel))
+    for i in range(0, axis_size - 1):
+        accum, kernel = f(i, (accum, kernel))
+
+    update = jnp.dot(inputs, kernel)
+
+    i = axis_size - 1
+    update_index = (0, 0, ((axis_index + i) % axis_size) * chunk_size)
+    accum = lax.dynamic_update_slice(accum, update, update_index)
+
+    return accum
 
 
 class Embed(nn.Module):
@@ -309,7 +395,7 @@ class Embed(nn.Module):
         mesh_axes = nn.logical_to_mesh_axes(self.names)
         if mesh_axes[0] == "data":
             self.embed_fn = shard_map.shard_map(
-                take_gather_0,
+                take_gather_accum_0,
                 in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
@@ -317,7 +403,7 @@ class Embed(nn.Module):
             )
         elif mesh_axes[1] == "data":
             self.embed_fn = shard_map.shard_map(
-                take_gather_1,
+                take_gather_accum_1,
                 in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
