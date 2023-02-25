@@ -1133,9 +1133,7 @@ class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         def init_fn(rngs):
-            random_params = self.module.init(
-                rngs, *args
-            )["params"]
+            random_params = self.module.init(rngs, *args)["params"]
             return random_params
 
         random_params = jax.jit(init_fn)(rngs)
@@ -1247,7 +1245,7 @@ class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
             )
 
         init_variables = jax.jit(init_fn)(jax.random.PRNGKey(0))
-        
+
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings(T5_ENCODE_INPUTS_DOCSTRING)

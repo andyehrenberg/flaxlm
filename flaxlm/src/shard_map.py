@@ -35,7 +35,7 @@ def dot_gather_1(x, y):
     return jnp.dot(y, gathered)
 
 
-def dot_gather_accum(kernel, inputs):
+def dot_gather_accum_0(kernel, inputs):
     axis_size = lax.psum(1, axis_name="data")
     axis_index = lax.axis_index(axis_name="data")
     chunk_size = kernel.shape[0]
@@ -67,6 +67,7 @@ def dot_gather_accum(kernel, inputs):
     for i in range(0, axis_size - 1):
         accum, kernel = f(i, (accum, kernel))
 
+    i = axis_size - 1
     x = lax.dynamic_slice(
         inputs,
         (0, 0, ((axis_index + i) % axis_size) * chunk_size),
@@ -79,10 +80,95 @@ def dot_gather_accum(kernel, inputs):
     return accum
 
 
+def dot_gather_accum_1(kernel, inputs):
+    axis_size = lax.psum(1, axis_name="data")
+    axis_index = lax.axis_index(axis_name="data")
+    chunk_size = kernel.shape[1]
+
+    def f(i, carrys):
+        accum, kernel = carrys
+
+        update = jnp.dot(inputs, kernel)
+
+        kernel = lax.ppermute(
+            kernel,
+            axis_name="data",
+            perm=[(j, (j - 1) % axis_size) for j in range(axis_size)],
+        )
+
+        update_index = (0, 0, ((axis_index + i) % axis_size) * chunk_size)
+        accum = lax.dynamic_update_slice(accum, update, update_index)
+
+        return accum, kernel
+
+    accum = jnp.zeros(
+        (inputs.shape[0], inputs.shape[1], chunk_size * axis_size), dtype=kernel.dtype
+    )
+    # accum, kernel = jax.lax.fori_loop(0, axis_size - 1, f, (accum, kernel))
+    for i in range(0, axis_size - 1):
+        accum, kernel = f(i, (accum, kernel))
+
+    update = jnp.dot(inputs, kernel)
+
+    i = axis_size - 1
+    update_index = (0, 0, ((axis_index + i) % axis_size) * chunk_size)
+    accum = lax.dynamic_update_slice(accum, update, update_index)
+
+    return accum
+
+
 def add_bias(x, y):
     x = lax.all_gather(x, "data", axis=0, tiled=True)
     x = jnp.reshape(x, (1,) * (y.ndim - 1) + (-1,))
     return x + y
+
+
+def bias_accum(bias, inputs):
+    axis_size = lax.psum(1, axis_name="data")
+    axis_index = lax.axis_index(axis_name="data")
+
+    bias = jnp.reshape(bias, (1,) * (inputs.ndim - 1) + (-1,))
+    chunk_size = bias.shape[-1]
+
+    def f(i, carrys):
+        accum, bias = carrys
+
+        x = lax.dynamic_slice(
+            inputs,
+            (0, 0, ((axis_index + i) % axis_size) * chunk_size),
+            (inputs.shape[0], inputs.shape[1], chunk_size),
+        )
+
+        update = x + bias
+
+        bias = lax.ppermute(
+            bias,
+            axis_name="data",
+            perm=[(j, (j - 1) % axis_size) for j in range(axis_size)],
+        )
+
+        update_index = (0, 0, ((axis_index + i) % axis_size) * chunk_size)
+        accum = lax.dynamic_update_slice(accum, update, update_index)
+
+        return accum, bias
+
+    accum = jnp.zeros_like(inputs, dtype=bias.dtype)
+    # accum, bias = jax.lax.fori_loop(0, axis_size - 1, f, (accum, bias))
+    for i in range(0, axis_size - 1):
+        accum, bias = f(i, (accum, bias))
+
+    i = axis_size - 1
+    x = lax.dynamic_slice(
+        inputs,
+        (0, 0, ((axis_index + i) % axis_size) * chunk_size),
+        (inputs.shape[0], inputs.shape[1], chunk_size),
+    )
+    update = x + bias
+
+    update_index = (0, 0, ((axis_index + i) % axis_size) * chunk_size)
+    accum = lax.dynamic_update_slice(accum, update, update_index)
+
+    return accum
 
 
 class Dense(nn.Module):
@@ -135,7 +221,7 @@ class Dense(nn.Module):
         mesh_axes = nn.logical_to_mesh_axes(self.names)
         if mesh_axes[0] == "data":
             dot_fn = shard_map.shard_map(
-                dot_gather_0,
+                dot_gather_accum_0,
                 in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
@@ -143,7 +229,7 @@ class Dense(nn.Module):
             )
         elif mesh_axes[1] == "data":
             dot_fn = shard_map.shard_map(
-                dot_gather_1,
+                dot_gather_accum_1,
                 in_specs=(mesh_axes, P("data")),
                 out_specs=P("data"),
                 mesh=self.mesh,
@@ -157,7 +243,7 @@ class Dense(nn.Module):
         if bias is not None:
             if mesh_axes[1] == "data":
                 y = shard_map.shard_map(
-                    add_bias,
+                    bias_accum,
                     in_specs=(P("data"), P("data")),
                     out_specs=P("data"),
                     mesh=self.mesh,
