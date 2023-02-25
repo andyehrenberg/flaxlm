@@ -117,13 +117,13 @@ def dot_gather_accum_1(kernel, inputs):
     return accum
 
 
-def add_bias(x, y):
+def bias_gather(x, y):
     x = lax.all_gather(x, "data", axis=0, tiled=True)
     x = jnp.reshape(x, (1,) * (y.ndim - 1) + (-1,))
     return x + y
 
 
-def bias_accum(bias, inputs):
+def bias_gather_accum(bias, inputs):
     axis_size = lax.psum(1, axis_name="data")
     axis_index = lax.axis_index(axis_name="data")
 
@@ -243,7 +243,7 @@ class Dense(nn.Module):
         if bias is not None:
             if mesh_axes[1] == "data":
                 y = shard_map.shard_map(
-                    bias_accum,
+                    bias_gather_accum,
                     in_specs=(P("data"), P("data")),
                     out_specs=P("data"),
                     mesh=self.mesh,
