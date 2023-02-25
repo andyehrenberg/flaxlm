@@ -45,7 +45,7 @@ def dot_gather_accum(kernel, inputs):
         x = lax.dynamic_slice(
             inputs,
             (0, 0, ((axis_index + i) % axis_size) * chunk_size),
-            (inputs.shape[0], inputs.shape[0], chunk_size),
+            (inputs.shape[0], inputs.shape[1], chunk_size),
         )
 
         update = jnp.dot(x, kernel)
@@ -70,7 +70,7 @@ def dot_gather_accum(kernel, inputs):
     x = lax.dynamic_slice(
         inputs,
         (0, 0, ((axis_index + i) % axis_size) * chunk_size),
-        (inputs.shape[0], inputs.shape[0], chunk_size),
+        (inputs.shape[0], inputs.shape[1], chunk_size),
     )
     update = jnp.dot(x, kernel)
 
