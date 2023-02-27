@@ -81,7 +81,7 @@ def shift_tokens_right(
     return shifted_input_ids
 
 
-def mult_gather(weight, hidden_states):
+def layernorm_gather(weight, hidden_states):
     weight = jax.lax.all_gather(weight, "data", axis=0, tiled=True)
     return weight * hidden_states
 
@@ -107,17 +107,21 @@ class FlaxT5LayerNorm(nn.Module):
             ),
             (self.hidden_size,),
         )
-        mesh_axes = nn.logical_to_mesh_axes(self.names)
-        if mesh_axes[0] == "data":
-            self.mult = shard_map.shard_map(
-                mult_gather,
-                in_specs=(P("data"), P("data")),
-                out_specs=P("data"),
-                mesh=self.mesh,
-                check_rep=False,
-            )
-        else:
-            self.mult = mult
+        param_axes = nn.logical_to_mesh_axes(self.names)
+        input_axes = nn.logical_to_mesh_axes(
+            ("batch", "length", "embed")
+        )
+        output_axes = nn.logical_to_mesh_axes(
+            ("batch", None, None)
+        )
+
+        self.mult = shard_map.shard_map(
+            layernorm_gather,
+            in_specs=(param_axes, input_axes),
+            out_specs=output_axes,
+            mesh=self.mesh,
+            check_rep=False,
+        )
 
     def __call__(self, hidden_states):
         """
@@ -126,6 +130,10 @@ class FlaxT5LayerNorm(nn.Module):
         # layer norm should always be calculated in float32
         variance = jnp.power(hidden_states.astype("f4"), 2).mean(axis=-1, keepdims=True)
         hidden_states = hidden_states / jnp.sqrt(variance + self.eps)
+
+        hidden_states = nn.with_logical_constraint(
+            hidden_states, P("batch", "length", "embed")
+        )
 
         return self.mult(self.weight, hidden_states)
 
@@ -377,14 +385,14 @@ class FlaxT5Attention(nn.Module):
             hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim)
         )
         return nn.with_logical_constraint(
-            hidden_states, P("batch", "length", "heads", "embed")
+            hidden_states, P("batch", None, "heads", "embed")
         )
 
     def _merge_heads(self, hidden_states):
         hidden_states = hidden_states.reshape(
             hidden_states.shape[:2] + (self.inner_dim,)
         )
-        return nn.with_logical_constraint(hidden_states, P("batch", "length", "embed"))
+        return nn.with_logical_constraint(hidden_states, P("batch", None, "embed"))
 
     @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
@@ -538,7 +546,7 @@ class FlaxT5Attention(nn.Module):
             (
                 key_states,
                 value_states,
-                attention_attention_mask,
+                attention_mask,
             ) = self._concatenate_to_cache(
                 key_states, value_states, query_states, attention_mask
             )
