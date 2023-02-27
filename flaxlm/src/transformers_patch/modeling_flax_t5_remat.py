@@ -81,7 +81,7 @@ def shift_tokens_right(
     return shifted_input_ids
 
 
-def layernorm_gather(weight, hidden_states):
+def mult_gather(weight, hidden_states):
     weight = jax.lax.all_gather(weight, "data", axis=0, tiled=True)
     return weight * hidden_states
 
@@ -115,13 +115,22 @@ class FlaxT5LayerNorm(nn.Module):
             ("batch", None, None)
         )
 
-        self.mult = shard_map.shard_map(
-            layernorm_gather,
-            in_specs=(param_axes, input_axes),
-            out_specs=output_axes,
-            mesh=self.mesh,
-            check_rep=False,
-        )
+        if param_axes[0] == "data":
+            self.mult = shard_map.shard_map(
+                mult_gather,
+                in_specs=(param_axes, input_axes),
+                out_specs=output_axes,
+                mesh=self.mesh,
+                check_rep=False,
+            )
+        else:
+            self.mult = shard_map.shard_map(
+                mult,
+                in_specs=(param_axes, input_axes),
+                out_specs=output_axes,
+                mesh=self.mesh,
+                check_rep=False,
+            )
 
     def __call__(self, hidden_states):
         """
