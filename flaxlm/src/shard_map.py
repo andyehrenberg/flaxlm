@@ -271,6 +271,7 @@ def take_gather_accum_0(kernel, inputs):
     chunk_size = kernel.shape[0]
 
     inputs = jax.nn.one_hot(inputs, chunk_size * axis_size)
+    (inputs,) = promote_dtype(inputs, dtype=kernel.dtype, inexact=False)
 
     def f(i, carrys):
         accum, kernel = carrys
@@ -330,6 +331,7 @@ def take_gather_accum_1(kernel, inputs):
     chunk_size = kernel.shape[1]
 
     inputs = jax.nn.one_hot(inputs, kernel.shape[0])
+    (inputs,) = promote_dtype(inputs, dtype=kernel.dtype, inexact=False)
 
     def f(i, carrys):
         accum, kernel = carrys
