@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import typing
 from typing import Optional, Sequence, Tuple, Union
 
@@ -325,10 +326,20 @@ def default_mesh(
 def setup_mesh_and_partitioning_rules(parallelism_args):
     mesh = default_mesh(parallelism_args.mp_num)
 
-    rules = partitioning_utils.make_partitioning_rules(
+    param_rules, compute_rules = partitioning_utils.make_partitioning_rules(
         parallelism_args.activation_partitioning_dims,
         parallelism_args.parameter_partitioning_dims,
     )
-    nn.set_logical_axis_rules(rules)
 
-    return mesh
+    return mesh, param_rules, compute_rules
+
+
+@contextlib.contextmanager
+def axis_rules(rules: Tuple):
+    """Context manager for setting the global resource mapping"""
+    old_rules = nn.get_logical_axis_rules()
+
+    nn.set_logical_axis_rules(rules)
+    yield
+    nn.set_logical_axis_rules(old_rules)
+    
