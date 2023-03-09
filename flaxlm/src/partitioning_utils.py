@@ -1,4 +1,7 @@
 from typing import Any, List, Optional, Tuple
+import threading
+import dataclasses
+import contextlib
 
 import jax
 import jax.numpy as jnp
@@ -224,8 +227,37 @@ def convert_global_batch_size(bsize: int, mesh: Mesh, dp_axis: int, mp_num: int)
     )
     return loader_batch_size, per_device_batch_size
 
+@dataclasses.dataclass
+class _Mesh(threading.local):
+    mesh: Optional[Mesh] = None
+    
+_mesh = _Mesh()
 
-def with_logical_constraint(x, logical_axes, mesh):
+
+def set_mesh(mesh: Mesh):
+    _mesh.mesh = mesh
+
+
+def get_mesh() -> Mesh:
+    return _mesh.mesh
+
+
+@contextlib.contextmanager
+def temp_mesh(mesh: Mesh):
+    old_mesh = _mesh.mesh
+    try:
+        _mesh.mesh = mesh
+        yield
+    finally:
+        _mesh.mesh = old_mesh
+
+
+def with_logical_constraint(x, logical_axes, mesh=None):
+    if mesh is None:
+        if _mesh.mesh is None:
+            return x
+        else:
+            mesh = _mesh.mesh
     sharding = jax.tree_util.tree_map(
         lambda pspec: NamedSharding(mesh, pspec),
         nn.logical_to_mesh(logical_axes),
