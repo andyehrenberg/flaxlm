@@ -43,6 +43,7 @@ from flaxlm.src.transformers_patch.gptj_config_remat import GPTJConfig
 from flaxlm.src.transformers_patch.logically_partitioned_model import (
     LogicallyPartitionedModel,
 )
+from flaxlm.src.transformers_patch.layers import Dense, Embed, LayerNorm
 
 P = PartitionSpec
 remat = nn_partitioning.remat
@@ -156,26 +157,22 @@ class FlaxGPTJAttention(nn.Module):
         self.rotary_dim = config.rotary_dim
 
         dense = partial(
-            nn.Dense,
+            Dense,
             self.embed_dim,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_range),
-                ("embed", "joined_kv"),
-            ),
+            names=("embed", "joined_kv"),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
 
-        self.out_proj = nn.Dense(
+        self.out_proj = Dense(
             self.embed_dim,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.init_std),
-                ("joined_kv", "embed"),
-            ),
+            names=("joined_kv", "embed"),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         self.resid_dropout = nn.Dropout(rate=config.resid_pdrop)
@@ -349,25 +346,19 @@ class FlaxGPTJMLP(nn.Module):
         embed_dim = self.config.hidden_size
         kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
 
-        self.fc_in = nn.Dense(
+        self.fc_in = Dense(
             self.intermediate_size,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                kernel_init,
-                ("embed", "mlp"),
-            ),
-            bias_init=nn.with_logical_partitioning(jax.nn.initializers.zeros, ("mlp",)),
+            names=("embed", "mlp"),
+            kernel_init=kernel_init,
+            bias_init=jax.nn.initializers.zeros,
         )
-        self.fc_out = nn.Dense(
+        self.fc_out = Dense(
             embed_dim,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                kernel_init,
-                ("mlp", "embed"),
-            ),
-            bias_init=nn.with_logical_partitioning(
-                jax.nn.initializers.zeros, ("embed",)
-            ),
+            names=("mlp", "embed"),
+            kernel_init=kernel_init,
+            bias_init=jax.nn.initializers.zeros,
         )
 
         self.act = ACT2FN[self.config.activation_function]
@@ -393,8 +384,8 @@ class FlaxGPTJBlock(nn.Module):
 
         self.ln_1 = nn.LayerNorm(
             dtype=self.dtype,
-            scale_init=nn.with_logical_partitioning(nn.initializers.ones, ("embed",)),
-            bias_init=nn.with_logical_partitioning(nn.initializers.zeros, ("embed",)),
+            scale_init=nn.initializers.ones,
+            bias_init=nn.initializers.zeros,
             epsilon=self.config.layer_norm_epsilon,
         )
 
@@ -669,21 +660,19 @@ class FlaxGPTJModule(nn.Module):
     def setup(self):
         self.embed_dim = self.config.hidden_size
 
-        self.wte = nn.Embed(
+        self.wte = Embed(
             self.config.vocab_size,
             self.embed_dim,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(stddev=self.config.initializer_range),
-                ("vocab", "embed"),
-            ),
+            names=("vocab", "embed"),
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.embd_pdrop)
         self.h = FlaxGPTJBlockCollection(self.config, dtype=self.dtype)
         self.ln_f = nn.LayerNorm(
             dtype=self.dtype,
-            scale_init=nn.with_logical_partitioning(nn.initializers.ones, ("embed",)),
-            bias_init=nn.with_logical_partitioning(nn.initializers.zeros, ("embed",)),
+            scale_init=nn.initializers.ones,
+            bias_init=nn.initializers.zeros,
             epsilon=self.config.layer_norm_epsilon,
         )
 
@@ -754,16 +743,12 @@ class FlaxGPTJForCausalLMModule(nn.Module):
 
     def setup(self):
         self.transformer = FlaxGPTJModule(self.config, dtype=self.dtype)
-        self.lm_head = nn.Dense(
+        self.lm_head = Dense(
             self.config.vocab_size,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(stddev=self.config.initializer_range),
-                ("embed", "vocab"),
-            ),
-            bias_init=nn.with_logical_partitioning(
-                jax.nn.initializers.zeros, ("vocab",)
-            ),
+            names=("embed", "vocab"),
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            bias_init=jax.nn.initializers.zeros,
         )
 
     def __call__(
