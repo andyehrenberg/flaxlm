@@ -382,7 +382,7 @@ class FlaxGPTJBlock(nn.Module):
             self.config.n_inner if self.config.n_inner is not None else 4 * hidden_size
         )
 
-        self.ln_1 = nn.LayerNorm(
+        self.ln_1 = LayerNorm(
             dtype=self.dtype,
             scale_init=nn.initializers.ones,
             bias_init=nn.initializers.zeros,
@@ -669,7 +669,7 @@ class FlaxGPTJModule(nn.Module):
         )
         self.dropout = nn.Dropout(rate=self.config.embd_pdrop)
         self.h = FlaxGPTJBlockCollection(self.config, dtype=self.dtype)
-        self.ln_f = nn.LayerNorm(
+        self.ln_f = LayerNorm(
             dtype=self.dtype,
             scale_init=nn.initializers.ones,
             bias_init=nn.initializers.zeros,

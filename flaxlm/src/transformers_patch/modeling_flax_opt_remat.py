@@ -36,6 +36,7 @@ from flaxlm.src.transformers_patch.opt_config_remat import OPTConfig
 from flaxlm.src.transformers_patch.logically_partitioned_model import (
     LogicallyPartitionedModel,
 )
+from flaxlm.src.transformers_patch.layers import Dense, Embed, LayerNorm
 
 remat = nn_partitioning.remat
 
@@ -119,31 +120,23 @@ class FlaxOPTAttention(nn.Module):
             )
 
         dense = partial(
-            nn.Dense,
+            Dense,
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.init_std),
-                ("embed", "joined_kv"),
-            ),
-            bias_init=nn.with_logical_partitioning(
-                jax.nn.initializers.zeros, ("joined_kv",)
-            ),
+            names=("embed", "joined_kv"),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
+            bias_init=jax.nn.initializers.zeros,
         )
 
         self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
-        self.out_proj = nn.Dense(
+        self.out_proj = Dense(
             self.embed_dim,
             use_bias=self.bias,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.init_std),
-                ("joined_kv", "embed"),
-            ),
-            bias_init=nn.with_logical_partitioning(
-                jax.nn.initializers.zeros, ("embed",)
-            ),
+            names=("joined_kv", "embed"),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
+            bias_init=jax.nn.initializers.zeros,
         )
 
         self.dropout_layer = nn.Dropout(rate=self.dropout)
@@ -320,33 +313,29 @@ class FlaxOPTDecoderLayer(nn.Module):
         self.dropout_layer = nn.Dropout(rate=self.config.dropout)
         self.activation_fn = ACT2FN[self.config.activation_function]
 
-        self.self_attn_layer_norm = nn.LayerNorm(
+        self.self_attn_layer_norm = LayerNorm(
             dtype=self.dtype,
             epsilon=1e-05,
-            scale_init=nn.with_logical_partitioning(nn.initializers.ones, ("embed",)),
-            bias_init=nn.with_logical_partitioning(nn.initializers.zeros, ("embed",)),
+            scale_init=nn.initializers.ones,
+            bias_init=nn.initializers.zeros,
         )
-        self.fc1 = nn.Dense(
+        self.fc1 = Dense(
             self.config.ffn_dim,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.init_std),
-                ("embed", "mlp"),
-            ),
+            names=("embed", "mlp"),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
-        self.fc2 = nn.Dense(
+        self.fc2 = Dense(
             self.embed_dim,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.init_std),
-                ("mlp", "embed"),
-            ),
+            names=("mlp", "embed"),
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
-        self.final_layer_norm = nn.LayerNorm(
+        self.final_layer_norm = LayerNorm(
             dtype=self.dtype,
             epsilon=1e-05,
-            scale_init=nn.with_logical_partitioning(nn.initializers.ones, ("embed",)),
-            bias_init=nn.with_logical_partitioning(nn.initializers.zeros, ("embed",)),
+            scale_init=nn.initializers.ones,
+            bias_init=nn.initializers.zeros,
         )
 
     def __call__(
@@ -453,7 +442,7 @@ class FlaxOPTDecoderLayerCollection(nn.Module):
         return outputs
 
 
-class FlaxOPTLearnedPositionalEmbedding(nn.Embed):
+class FlaxOPTLearnedPositionalEmbedding(Embed):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -462,7 +451,7 @@ class FlaxOPTLearnedPositionalEmbedding(nn.Embed):
         self.offset = 2
         self.embedding = self.param(
             "embedding",
-            self.embedding_init,
+            nn.with_logical_partitioning(self.embedding_init, self.names),
             (self.num_embeddings + self.offset, self.features),
             self.param_dtype,
         )
@@ -485,42 +474,34 @@ class FlaxOPTDecoder(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.max_target_positions = self.config.max_position_embeddings
 
-        self.embed_tokens = nn.Embed(
+        self.embed_tokens = Embed(
             self.config.vocab_size,
             self.config.word_embed_proj_dim,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(stddev=self.config.init_std),
-                ("vocab", "embed"),
-            ),
+            names=("vocab", "embed"),
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.init_std),
             dtype=self.dtype,
         )
 
         self.embed_positions = FlaxOPTLearnedPositionalEmbedding(
             self.config.max_position_embeddings,
             embed_dim,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(stddev=self.config.init_std),
-                ("vocab", "embed"),
-            ),
+            names=("vocab", "embed"),
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.init_std),
             dtype=self.dtype,
         )
 
         if self.config.word_embed_proj_dim != self.config.hidden_size:
-            self.project_in = nn.Dense(
+            self.project_in = Dense(
                 self.config.hidden_size,
                 use_bias=False,
-                kernel_init=nn.with_logical_partitioning(
-                    jax.nn.initializers.normal(stddev=self.config.init_std),
-                    ("embed", "mlp"),
-                ),
+                names=("embed", "mlp"),
+                kernel_init=jax.nn.initializers.normal(stddev=self.config.init_std),
             )
-            self.project_out = nn.Dense(
+            self.project_out = Dense(
                 self.config.word_embed_proj_dim,
                 use_bias=False,
-                kernel_init=nn.with_logical_partitioning(
-                    jax.nn.initializers.normal(stddev=self.config.init_std),
-                    ("mlp", "embed"),
-                ),
+                names=("mlp", "embed"),
+                kernel_init=jax.nn.initializers.normal(stddev=self.config.init_std),
             )
 
         else:
@@ -534,15 +515,11 @@ class FlaxOPTDecoder(nn.Module):
             self.config.do_layer_norm_before
             and not self.config._remove_final_layer_norm
         ):
-            self.final_layer_norm = nn.LayerNorm(
+            self.final_layer_norm = LayerNorm(
                 dtype=self.dtype,
                 epsilon=1e-05,
-                scale_init=nn.with_logical_partitioning(
-                    nn.initializers.ones, ("embed",)
-                ),
-                bias_init=nn.with_logical_partitioning(
-                    nn.initializers.zeros, ("embed",)
-                ),
+                scale_init=nn.initializers.ones,
+                bias_init=nn.initializers.zeros,
             )
         else:
             self.final_layer_norm = None
@@ -821,14 +798,12 @@ class FlaxOPTForCausalLMModule(nn.Module):
 
     def setup(self):
         self.model = FlaxOPTModule(config=self.config, dtype=self.dtype)
-        self.lm_head = nn.Dense(
+        self.lm_head = Dense(
             self.config.vocab_size,
             use_bias=False,
             dtype=self.dtype,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(stddev=self.config.init_std),
-                ("embed", "vocab"),
-            ),
+            names=("embed", "vocab"),
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.init_std),
         )
 
     def __call__(
