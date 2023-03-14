@@ -112,8 +112,6 @@ class Trainer:
         self.num_train_steps = num_train_steps
         self.half_precision = args.optimizer_args.half_precision
         self.mp_num = args.parallelism_args.mp_num
-        self.param_rules = param_rules
-        self.compute_rules = compute_rules
         from_pt = args.model_args.from_pt
         gradient_checkpointing = args.model_args.gradient_checkpointing
 
@@ -224,7 +222,7 @@ class Trainer:
             out_shardings=self.mesh_train_state_spec,
         )
         def partitioned_create(params):
-            params = jax.lax.with_sharding_constraint(params, self.mesh_param_spec)
+            params = self.with_logical_constraint(params, self.param_spec)
             train_state = create_fn(params)
 
             return train_state
@@ -288,25 +286,24 @@ class Trainer:
                     train_state.params, minibatch, dropout_rng
                 )
 
-                grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
+                grads = self.with_logical_constraint(grads, self.param_spec)
 
                 return loss, grads, weight, dropout_rng
 
             if self.gradient_accumulation_steps == 1:
-                with mesh_utils.axis_rules(self.compute_rules):
-                    loss, grads, weight, dropout_rng = loss_and_grad(
-                        None, train_state.dropout_rng
-                    )
-                    loss, grads = jax.tree_util.tree_map(
-                        lambda x: x * weight, (loss, grads)
-                    )
-                grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
+                loss, grads, weight, dropout_rng = loss_and_grad(
+                    None, train_state.dropout_rng
+                )
+                loss, grads = jax.tree_util.tree_map(
+                    lambda x: x * weight, (loss, grads)
+                )
+                grads = self.with_logical_constraint(grads, self.param_spec)
             else:
                 init_carry = (
                     0.0,
-                    jax.lax.with_sharding_constraint(
+                    self.with_logical_constraint(
                         jax.tree_util.tree_map(jnp.zeros_like, train_state.params),
-                        self.mesh_param_spec,
+                        self.param_spec,
                     ),
                     0.0,
                     train_state.dropout_rng,
@@ -316,25 +313,22 @@ class Trainer:
                 def cumul_minibatch_step(
                     grad_idx: Scalar, carry: Tuple[Scalar, FrozenDict, Scalar]
                 ) -> Tuple[Scalar, FrozenDict, Scalar]:
-                    with mesh_utils.axis_rules(self.compute_rules):
-                        loss, grads, weight, dropout_rng = carry
-                        sub_loss, sub_grads, sub_weight, dropout_rng = loss_and_grad(
-                            grad_idx
-                        )
-                        sub_loss, sub_grads = jax.tree_util.tree_map(
-                            lambda x: x * sub_weight, (sub_loss, sub_grads)
-                        )
-                    sub_grads = jax.lax.with_sharding_constraint(
-                        sub_grads, self.mesh_param_spec
+                    loss, grads, weight, dropout_rng = carry
+                    sub_loss, sub_grads, sub_weight, dropout_rng = loss_and_grad(
+                        grad_idx
+                    )
+                    sub_loss, sub_grads = jax.tree_util.tree_map(
+                        lambda x: x * sub_weight, (sub_loss, sub_grads)
+                    )
+                    sub_grads = self.with_logical_constraint(
+                        sub_grads, self.param_spec
                     )
                     loss, grads, weight = jax.tree_util.tree_map(
                         jnp.add,
                         (loss, grads, weight),
                         (sub_loss, sub_grads, sub_weight),
                     )
-                    grads = jax.lax.with_sharding_constraint(
-                        grads, self.mesh_param_spec
-                    )
+                    grads = self.with_logical_constraint(grads, self.param_spec)
                     return loss, grads, weight, dropout_rng
 
                 (
@@ -348,14 +342,14 @@ class Trainer:
                     cumul_minibatch_step,
                     init_carry,
                 )
-                grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
+                grads = self.with_logical_constraint(grads, self.param_spec)
 
             metrics = {"loss": loss}
 
             grads, metrics = jax.tree_util.tree_map(
                 lambda x: x / weight, (grads, metrics)
             )
-            grads = jax.lax.with_sharding_constraint(grads, self.mesh_param_spec)
+            grads = self.with_logical_constraint(grads, self.param_spec)
 
             new_train_state = train_state.apply_gradients(
                 grads=grads, dropout_rng=dropout_rng
@@ -391,8 +385,6 @@ class Trainer:
                 **kwargs,
             ).sequences
 
-            sequences = jax.lax.with_sharding_constraint(sequences, self.batch_spec)
-
             return sequences
 
         return jax.jit(
@@ -415,25 +407,24 @@ class Trainer:
             batch = jax.lax.with_sharding_constraint(batch, self.batch_spec)
 
             def compute_loss(params: FrozenDict, batch: Dict) -> Scalar:
-                with mesh_utils.axis_rules(self.compute_rules):
-                    params = self.with_logical_constraint(params, self.param_spec)
+                params = self.with_logical_constraint(params, self.param_spec)
 
-                    if self.model_config.is_encoder_decoder:
-                        return encoder_decoder_loss_fn(
-                            train_state.apply_fn,
-                            params,
-                            batch,
-                            False,
-                            None,
-                        )
-                    else:
-                        return decoder_only_loss_fn(
-                            train_state.apply_fn,
-                            params,
-                            batch,
-                            False,
-                            None,
-                        )
+                if self.model_config.is_encoder_decoder:
+                    return encoder_decoder_loss_fn(
+                        train_state.apply_fn,
+                        params,
+                        batch,
+                        False,
+                        None,
+                    )
+                else:
+                    return decoder_only_loss_fn(
+                        train_state.apply_fn,
+                        params,
+                        batch,
+                        False,
+                        None,
+                    )
 
             loss, weight = compute_loss(train_state.params, batch)
 

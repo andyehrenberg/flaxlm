@@ -38,7 +38,7 @@ def train(_):
 
     rng = jrandom.PRNGKey(config.trainer_args.seed)
 
-    mesh, param_rules, compute_rules = mesh_utils.setup_mesh_and_partitioning_rules(
+    mesh, param_rules = mesh_utils.setup_mesh_and_partitioning_rules(
         config.trainer_args.parallelism_args
     )
     nn.set_logical_axis_rules(param_rules)
@@ -121,7 +121,6 @@ def train(_):
         mesh,
         num_train_steps,
         param_rules,
-        compute_rules,
     )
 
     num_steps = 0

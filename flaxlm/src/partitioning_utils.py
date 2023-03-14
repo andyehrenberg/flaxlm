@@ -67,7 +67,7 @@ def make_partitioning_rules(
     - Sequence of logical axis rules (`logical_name`, `shard_axis`) where dimensions of tensors annotated with `logical_name` will be sharded along `shard_axis`.
     """
     if activation_partitioning_dims == 0 and parameter_partitioning_dims == 0:
-        param_rules = compute_rules = (
+        param_rules = (
             ("batch", None),
             ("vocab", None),
             ("embed", None),
@@ -77,7 +77,7 @@ def make_partitioning_rules(
             ("joined_kv", None),
         )
     elif activation_partitioning_dims == 1 and parameter_partitioning_dims == 0:
-        param_rules = compute_rules = (
+        param_rules = (
             ("batch", "data"),
             ("vocab", None),
             ("embed", None),
@@ -87,7 +87,7 @@ def make_partitioning_rules(
             ("joined_kv", None),
         )
     elif activation_partitioning_dims == 1 and parameter_partitioning_dims == 1:
-        param_rules = compute_rules = (
+        param_rules = (
             ("batch", "data"),
             ("vocab", "model"),
             ("embed", None),
@@ -97,7 +97,7 @@ def make_partitioning_rules(
             ("joined_kv", "model"),
         )
     elif activation_partitioning_dims == 2 and parameter_partitioning_dims == 1:
-        param_rules = compute_rules = (
+        param_rules = (
             ("batch", "data"),
             ("vocab", "model"),
             ("mlp", "model"),
@@ -116,15 +116,6 @@ def make_partitioning_rules(
             ("joined_kv", "model"),
             ("embed", "data"),
         )
-        compute_rules = (
-            ("batch", "data"),
-            ("vocab", "model"),
-            ("mlp", "model"),
-            ("heads", "model"),
-            ("kv", None),
-            ("joined_kv", "model"),
-            ("embed", None),
-        )
     elif activation_partitioning_dims == 2 and parameter_partitioning_dims == 2:
         param_rules = (
             ("batch", "data"),
@@ -136,22 +127,12 @@ def make_partitioning_rules(
             ("embed", "model"),
             ("embed", "data"),
         )
-        compute_rules = (
-            ("batch", "data"),
-            ("vocab", "model"),
-            ("mlp", "model"),
-            ("heads", "model"),
-            ("kv", None),
-            ("joined_kv", "model"),
-            ("embed", "model"),
-        )
 
     replicated_rules = (("length", None),)
 
-    compute_rules += replicated_rules
     param_rules += replicated_rules
 
-    return param_rules, compute_rules
+    return param_rules
 
 
 # inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
