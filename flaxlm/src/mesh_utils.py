@@ -326,12 +326,12 @@ def default_mesh(
 def setup_mesh_and_partitioning_rules(parallelism_args):
     mesh = default_mesh(parallelism_args.mp_num)
 
-    param_rules, compute_rules = partitioning_utils.make_partitioning_rules(
+    param_rules = partitioning_utils.make_partitioning_rules(
         parallelism_args.activation_partitioning_dims,
         parallelism_args.parameter_partitioning_dims,
     )
 
-    return mesh, param_rules, compute_rules
+    return mesh, param_rules
 
 
 @contextlib.contextmanager

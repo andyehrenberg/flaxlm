@@ -1,4 +1,7 @@
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Union
+import threading
+import dataclasses
+import contextlib
 
 import jax
 import jax.numpy as jnp
@@ -9,6 +12,8 @@ import flax.linen as nn
 from flax.core.meta import Partitioned
 
 P = PartitionSpec
+_UNSPECIFIED = jax.pxla._UNSPECIFIED
+_is_unspecified = jax.pxla._is_unspecified
 
 
 def shard_logically_partitioned_params(params, mesh):
@@ -64,7 +69,7 @@ def make_partitioning_rules(
     - Sequence of logical axis rules (`logical_name`, `shard_axis`) where dimensions of tensors annotated with `logical_name` will be sharded along `shard_axis`.
     """
     if activation_partitioning_dims == 0 and parameter_partitioning_dims == 0:
-        param_rules = compute_rules = (
+        param_rules = (
             ("batch", None),
             ("vocab", None),
             ("embed", None),
@@ -74,7 +79,7 @@ def make_partitioning_rules(
             ("joined_kv", None),
         )
     elif activation_partitioning_dims == 1 and parameter_partitioning_dims == 0:
-        param_rules = compute_rules = (
+        param_rules = (
             ("batch", "data"),
             ("vocab", None),
             ("embed", None),
@@ -84,7 +89,7 @@ def make_partitioning_rules(
             ("joined_kv", None),
         )
     elif activation_partitioning_dims == 1 and parameter_partitioning_dims == 1:
-        param_rules = compute_rules = (
+        param_rules = (
             ("batch", "data"),
             ("vocab", "model"),
             ("embed", None),
@@ -94,7 +99,7 @@ def make_partitioning_rules(
             ("joined_kv", "model"),
         )
     elif activation_partitioning_dims == 2 and parameter_partitioning_dims == 1:
-        param_rules = compute_rules = (
+        param_rules = (
             ("batch", "data"),
             ("vocab", "model"),
             ("mlp", "model"),
@@ -113,15 +118,6 @@ def make_partitioning_rules(
             ("joined_kv", "model"),
             ("embed", "data"),
         )
-        compute_rules = (
-            ("batch", "data"),
-            ("vocab", "model"),
-            ("mlp", "model"),
-            ("heads", "model"),
-            ("kv", None),
-            ("joined_kv", "model"),
-            ("embed", None),
-        )
     elif activation_partitioning_dims == 2 and parameter_partitioning_dims == 2:
         param_rules = (
             ("batch", "data"),
@@ -133,22 +129,12 @@ def make_partitioning_rules(
             ("embed", "model"),
             ("embed", "data"),
         )
-        compute_rules = (
-            ("batch", "data"),
-            ("vocab", "model"),
-            ("mlp", "model"),
-            ("heads", "model"),
-            ("kv", None),
-            ("joined_kv", "model"),
-            ("embed", "model"),
-        )
 
     replicated_rules = (("length", None),)
 
-    compute_rules += replicated_rules
     param_rules += replicated_rules
 
-    return param_rules, compute_rules
+    return param_rules
 
 
 # inspired by https://github.com/borisdayma/dalle-mini/blob/main/tools/train/train.py
@@ -224,10 +210,85 @@ def convert_global_batch_size(bsize: int, mesh: Mesh, dp_axis: int, mp_num: int)
     )
     return loader_batch_size, per_device_batch_size
 
+@dataclasses.dataclass
+class _Mesh(threading.local):
+    mesh: Optional[Mesh] = None
+    
+_mesh = _Mesh()
 
-def with_logical_constraint(x, logical_axes, mesh):
+
+def set_mesh(mesh: Mesh):
+    _mesh.mesh = mesh
+
+
+def get_mesh() -> Mesh:
+    return _mesh.mesh
+
+
+@contextlib.contextmanager
+def temp_mesh(mesh: Mesh):
+    old_mesh = _mesh.mesh
+    try:
+        _mesh.mesh = mesh
+        yield
+    finally:
+        _mesh.mesh = old_mesh
+
+
+def with_logical_constraint(x, logical_axes, mesh=None):
+    if mesh is None:
+        if _mesh.mesh is None:
+            return x
+        else:
+            mesh = _mesh.mesh
     sharding = jax.tree_util.tree_map(
         lambda pspec: NamedSharding(mesh, pspec),
         nn.logical_to_mesh(logical_axes),
     )
     return jax.lax.with_sharding_constraint(x, sharding)
+
+
+def shard(
+    fun: Callable,
+    mesh,
+    in_shardings=_UNSPECIFIED,
+    out_shardings=_UNSPECIFIED,
+    static_argnums: Union[int, Sequence[int], None] = None,
+    static_argnames: Union[str, Iterable[str], None] = None,
+    donate_argnums: Union[int, Sequence[int]] = (),
+):
+    if not _is_unspecified(in_shardings):
+        if isinstance(in_shardings, P):
+            convert_fn = nn.logical_to_mesh
+        elif isinstance(in_shardings, tuple) and isinstance(in_shardings[0], str):
+            convert_fn = nn.logical_to_mesh_axes
+        else:
+            raise ValueError("in_shardings must either be _UNSPECIFIED, PartitionSpec, or tuple of strs")
+        mesh_in_shardings = jax.tree_util.tree_map(
+            lambda pspec: NamedSharding(mesh, pspec),
+            convert_fn(in_shardings),
+        )
+    else:
+        mesh_in_shardings=in_shardings
+    if not _is_unspecified(out_shardings):
+        if isinstance(out_shardings, P):
+            convert_fn = nn.logical_to_mesh
+        elif isinstance(out_shardings, tuple) and isinstance(out_shardings[0], str):
+            convert_fn = nn.logical_to_mesh_axes
+        else:
+            raise ValueError("out_shardings must either be _UNSPECIFIED, PartitionSpec, or tuple of strs")
+        mesh_out_shardings = jax.tree_util.tree_map(
+            lambda pspec: NamedSharding(mesh, pspec),
+            convert_fn(out_shardings),
+        )
+    else:
+        mesh_out_shardings = out_shardings
+        
+    return jax.jit(
+        fun,
+        in_shardings=mesh_in_shardings,
+        out_shardings=mesh_out_shardings,
+        static_argnums=static_argnums,
+        static_argnames=static_argnames,
+        donate_argnums=donate_argnums,
+    )

@@ -52,6 +52,9 @@ from flaxlm.src.transformers_patch.t5_config_remat import T5Config
 from flaxlm.src.transformers_patch.logically_partitioned_model import (
     LogicallyPartitionedModel,
 )
+import flaxlm.src.partitioning_utils as partitioning_utils
+from flaxlm.src.transformers_patch.layers import Dense, Embed
+
 
 P = PartitionSpec
 remat = nn_partitioning.remat
@@ -96,12 +99,17 @@ class FlaxT5LayerNorm(nn.Module):
         )
 
     def __call__(self, hidden_states):
-        """
+        """"
         Construct a layernorm module in the T5 style; No bias and no subtraction of mean.
         """
         # layer norm should always be calculated in float32
         variance = jnp.power(hidden_states.astype("f4"), 2).mean(axis=-1, keepdims=True)
         hidden_states = hidden_states / jnp.sqrt(variance + self.eps)
+
+        if nn.logical_to_mesh_axes(("embed",))[0] == "data":
+            return partitioning_utils.with_logical_constraint(
+                self.weight, P("embed",)
+            ) * hidden_states
 
         return self.weight * hidden_states
 
@@ -114,22 +122,18 @@ class FlaxT5DenseActDense(nn.Module):
         wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
         wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
 
-        self.wi = nn.Dense(
+        self.wi = Dense(
             self.config.d_ff,
+            names=("embed", "mlp"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wi_init_std),
-                ("embed", "mlp"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
-        self.wo = nn.Dense(
+        self.wo = Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wo_init_std),
-                ("mlp", "embed"),
-            ),
+            names=("mlp", "embed"),
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -151,31 +155,25 @@ class FlaxT5DenseGatedActDense(nn.Module):
         wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
         wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
 
-        self.wi_0 = nn.Dense(
+        self.wi_0 = Dense(
             self.config.d_ff,
+            names=("embed", "mlp"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wi_init_std),
-                ("embed", "mlp"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
-        self.wi_1 = nn.Dense(
+        self.wi_1 = Dense(
             self.config.d_ff,
+            names=("embed", "mlp"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wi_init_std),
-                ("embed", "mlp"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
         )
-        self.wo = nn.Dense(
+        self.wo = Dense(
             self.config.d_model,
+            names=("mlp", "embed"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wo_init_std),
-                ("mlp", "embed"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
@@ -241,51 +239,41 @@ class FlaxT5Attention(nn.Module):
         kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
         o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
 
-        self.q = nn.Dense(
+        self.q = Dense(
             self.inner_dim,
+            names=("embed", "joined_kv"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(q_init_std),
-                ("embed", "joined_kv"),
-            ),
+            kernel_init=jax.nn.initializers.normal(q_init_std),
             dtype=self.dtype,
         )
-        self.k = nn.Dense(
+        self.k = Dense(
             self.inner_dim,
+            names=("embed", "joined_kv"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(kv_init_std),
-                ("embed", "joined_kv"),
-            ),
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
             dtype=self.dtype,
         )
-        self.v = nn.Dense(
+        self.v = Dense(
             self.inner_dim,
+            names=("embed", "joined_kv"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(kv_init_std),
-                ("embed", "joined_kv"),
-            ),
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
             dtype=self.dtype,
         )
-        self.o = nn.Dense(
+        self.o = Dense(
             self.d_model,
+            names=("joined_kv", "embed"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(o_init_std),
-                ("joined_kv", "embed"),
-            ),
+            kernel_init=jax.nn.initializers.normal(o_init_std),
             dtype=self.dtype,
         )
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embed(
+            self.relative_attention_bias = Embed(
                 self.relative_attention_num_buckets,
                 self.n_heads,
-                embedding_init=nn.with_logical_partitioning(
-                    jax.nn.initializers.normal(kv_init_std),
-                    ("buckets", "heads"),
-                ),
+                embedding_init=jax.nn.initializers.normal(kv_init_std),
+                names=("buckets", "heads"),
                 dtype=self.dtype,
             )
 
@@ -353,7 +341,7 @@ class FlaxT5Attention(nn.Module):
         hidden_states = hidden_states.reshape(
             hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim)
         )
-        return nn.with_logical_constraint(
+        return partitioning_utils.with_logical_constraint(
             hidden_states, P("batch", "length", "heads", "embed")
         )
 
@@ -361,7 +349,9 @@ class FlaxT5Attention(nn.Module):
         hidden_states = hidden_states.reshape(
             hidden_states.shape[:2] + (self.inner_dim,)
         )
-        return nn.with_logical_constraint(hidden_states, P("batch", "length", "embed"))
+        return partitioning_utils.with_logical_constraint(
+            hidden_states, P("batch", "length", "embed")
+        )
 
     @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
@@ -862,7 +852,7 @@ class FlaxT5BlockCollection(nn.Module):
 
 class FlaxT5Stack(nn.Module):
     config: T5Config
-    embed_tokens: nn.Embed
+    embed_tokens: Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
@@ -1408,13 +1398,11 @@ class FlaxT5Module(nn.Module):
         return self.decoder
 
     def setup(self):
-        self.shared = nn.Embed(
+        self.shared = Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
-                ("vocab", "embed"),
-            ),
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            names=("vocab", "embed"),
             dtype=self.dtype,
         )
 
@@ -1528,13 +1516,11 @@ class FlaxT5EncoderModule(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.shared = nn.Embed(
+        self.shared = Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
-                ("vocab", "embed"),
-            ),
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            names=("vocab", "embed"),
             dtype=self.dtype,
         )
 
@@ -1632,13 +1618,11 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
     def setup(self):
         self.model_dim = self.config.d_model
 
-        self.shared = nn.Embed(
+        self.shared = Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_factor),
-                ("vocab", "embed"),
-            ),
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor),
+            names=("vocab", "embed"),
             dtype=self.dtype,
         )
 
@@ -1654,13 +1638,11 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         decoder_config.num_layers = self.config.num_decoder_layers
         self.decoder = FlaxT5Stack(decoder_config, self.shared, dtype=self.dtype)
 
-        self.lm_head = nn.Dense(
+        self.lm_head = Dense(
             self.config.vocab_size,
+            names=("embed", "vocab"),
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_factor),
-                ("embed", "vocab"),
-            ),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_factor),
             dtype=self.dtype,
         )
 
