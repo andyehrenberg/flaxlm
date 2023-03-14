@@ -42,6 +42,7 @@ def train(_):
         config.trainer_args.parallelism_args
     )
     nn.set_logical_axis_rules(param_rules)
+    partitioning_utils.set_mesh(mesh)
 
     batch_size = partitioning_utils.convert_per_device_batch_size(
         config.trainer_args.sampling_args.per_device_batch_size,

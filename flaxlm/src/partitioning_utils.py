@@ -1,4 +1,4 @@
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Union
 import threading
 import dataclasses
 import contextlib
@@ -12,6 +12,8 @@ import flax.linen as nn
 from flax.core.meta import Partitioned
 
 P = PartitionSpec
+_UNSPECIFIED = jax.pxla._UNSPECIFIED
+_is_unspecified = jax.pxla._is_unspecified
 
 
 def shard_logically_partitioned_params(params, mesh):
@@ -244,3 +246,49 @@ def with_logical_constraint(x, logical_axes, mesh=None):
         nn.logical_to_mesh(logical_axes),
     )
     return jax.lax.with_sharding_constraint(x, sharding)
+
+
+def shard(
+    fun: Callable,
+    mesh,
+    in_shardings=_UNSPECIFIED,
+    out_shardings=_UNSPECIFIED,
+    static_argnums: Union[int, Sequence[int], None] = None,
+    static_argnames: Union[str, Iterable[str], None] = None,
+    donate_argnums: Union[int, Sequence[int]] = (),
+):
+    if not _is_unspecified(in_shardings):
+        if isinstance(in_shardings, P):
+            convert_fn = nn.logical_to_mesh
+        elif isinstance(in_shardings, tuple) and isinstance(in_shardings[0], str):
+            convert_fn = nn.logical_to_mesh_axes
+        else:
+            raise ValueError("in_shardings must either be _UNSPECIFIED, PartitionSpec, or tuple of strs")
+        mesh_in_shardings = jax.tree_util.tree_map(
+            lambda pspec: NamedSharding(mesh, pspec),
+            convert_fn(in_shardings),
+        )
+    else:
+        mesh_in_shardings=in_shardings
+    if not _is_unspecified(out_shardings):
+        if isinstance(out_shardings, P):
+            convert_fn = nn.logical_to_mesh
+        elif isinstance(out_shardings, tuple) and isinstance(out_shardings[0], str):
+            convert_fn = nn.logical_to_mesh_axes
+        else:
+            raise ValueError("out_shardings must either be _UNSPECIFIED, PartitionSpec, or tuple of strs")
+        mesh_out_shardings = jax.tree_util.tree_map(
+            lambda pspec: NamedSharding(mesh, pspec),
+            convert_fn(out_shardings),
+        )
+    else:
+        mesh_out_shardings = out_shardings
+        
+    return jax.jit(
+        fun,
+        in_shardings=mesh_in_shardings,
+        out_shardings=mesh_out_shardings,
+        static_argnums=static_argnums,
+        static_argnames=static_argnames,
+        donate_argnums=donate_argnums,
+    )

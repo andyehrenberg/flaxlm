@@ -6,13 +6,12 @@ import jax.numpy as jnp
 import jax.random as jrandom
 import optax
 from chex import Array, Scalar
-from jax.sharding import Mesh, PartitionSpec, NamedSharding
+from jax.sharding import Mesh, PartitionSpec
 import flax.linen as nn
 from flax.core.frozen_dict import FrozenDict
 
 import flaxlm.src.partitioning_utils as partitioning_utils
 import flaxlm.src.utils as utils
-import flaxlm.src.mesh_utils as mesh_utils
 
 P = PartitionSpec
 
@@ -98,7 +97,6 @@ class Trainer:
             mesh: Mesh,
             num_train_steps: int,
             param_rules: Tuple,
-            compute_rules: Tuple,
         ):
         self.gradient_accumulation_steps = (
             args.sampling_args.gradient_accumulation_steps
@@ -147,15 +145,11 @@ class Trainer:
         )
         self.model_config = model.config
 
-        nn.set_logical_axis_rules(param_rules)
-
         self.setup_train_state(model, eval_model, params, dropout_rng)
         del params
 
-        self.batch_spec = NamedSharding(self.mesh, nn.logical_to_mesh(P("batch")))
-        self.grad_batch_spec = NamedSharding(
-            self.mesh, nn.logical_to_mesh(P(None, "batch"))
-        )
+        self.batch_spec = P("batch")
+        self.grad_batch_spec = P(None, "batch")
 
         self.train = self.make_train_step()
 
@@ -208,18 +202,12 @@ class Trainer:
         train_state_shape = jax.eval_shape(create_fn, params)
 
         self.train_state_spec = partitioning_utils.get_partition_spec(train_state_shape)
-        self.mesh_train_state_spec = jax.tree_util.tree_map(
-            lambda pspec: NamedSharding(self.mesh, pspec),
-            nn.logical_to_mesh(
-                self.train_state_spec
-            ),
-        )
         self.param_spec = self.train_state_spec.params
-        self.mesh_param_spec = self.mesh_train_state_spec.params
 
         @partial(
-            jax.jit,
-            out_shardings=self.mesh_train_state_spec,
+            partitioning_utils.shard,
+            mesh=self.mesh,
+            out_shardings=self.train_state_spec,
         )
         def partitioned_create(params):
             params = self.with_logical_constraint(params, self.param_spec)
@@ -235,7 +223,7 @@ class Trainer:
         ) -> Tuple[utils.TrainState, Dict]:
             print("Compiling train step")
 
-            batch = jax.lax.with_sharding_constraint(
+            batch = self.with_logical_constraint(
                 batch,
                 self.batch_spec
                 if self.gradient_accumulation_steps == 1
@@ -278,7 +266,7 @@ class Trainer:
                     get_minibatch(batch, grad_idx) if grad_idx is not None else batch
                 )
 
-                minibatch = jax.lax.with_sharding_constraint(minibatch, self.batch_spec)
+                minibatch = self.with_logical_constraint(minibatch, self.batch_spec)
 
                 dropout_rng, _ = jrandom.split(dropout_rng)
 
@@ -357,12 +345,9 @@ class Trainer:
 
             return new_train_state, metrics
 
-        return jax.jit(
+        return partitioning_utils.shard(
             train_step,
-            out_shardings=(
-                self.mesh_train_state_spec,
-                NamedSharding(self.mesh, P()),
-            ),
+            out_shardings=(self.train_state_spec, P()),
             donate_argnums=(0,),
         )
 
@@ -374,7 +359,7 @@ class Trainer:
             **kwargs
         ):
             input_ids, attention_mask = jax.tree_util.tree_map(
-                lambda x: jax.lax.with_sharding_constraint(x, self.batch_spec),
+                lambda x: self.with_logical_constraint(x, self.batch_spec),
                 (input_ids, attention_mask),
             )
 
@@ -387,7 +372,7 @@ class Trainer:
 
             return sequences
 
-        return jax.jit(
+        return partitioning_utils.shard(
             partial(
                 generate,
                 max_new_tokens=self.max_generation_new_tokens,
@@ -404,7 +389,7 @@ class Trainer:
         def eval_step(train_state: utils.TrainState, batch: Dict) -> Dict:
             print("Compiling eval step")
 
-            batch = jax.lax.with_sharding_constraint(batch, self.batch_spec)
+            batch = self.with_logical_constraint(batch, self.batch_spec)
 
             def compute_loss(params: FrozenDict, batch: Dict) -> Scalar:
                 params = self.with_logical_constraint(params, self.param_spec)
@@ -430,7 +415,7 @@ class Trainer:
 
             return {"loss": loss, "weight": weight}
 
-        return jax.jit(eval_step, out_shardings=NamedSharding(self.mesh, P()))
+        return partitioning_utils.shard(eval_step, out_shardings=P())
 
     def run_eval(self, dataloader):
         losses, weights = 0.0, 0.0
