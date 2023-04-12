@@ -142,10 +142,10 @@ class Trainer:
         model, eval_model, params = utils.setup_model(
             model_cls,
             pretrained_path,
-            self.mp_num,
             from_pt,
             self.dtype,
             gradient_checkpointing,
+            self.mesh,
         )
         self.model_config = model.config
 

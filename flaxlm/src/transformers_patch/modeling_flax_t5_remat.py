@@ -20,7 +20,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.random import PRNGKey
-from jax.sharding import PartitionSpec
+from jax.sharding import PartitionSpec, Mesh
+import jax.experimental.shard_map as shard_map
 import flax.linen as nn
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
@@ -52,6 +53,7 @@ from flaxlm.src.transformers_patch.t5_config_remat import T5Config
 from flaxlm.src.transformers_patch.logically_partitioned_model import (
     LogicallyPartitionedModel,
 )
+from flaxlm.src.shard_map import Dense, Embed
 
 P = PartitionSpec
 remat = nn_partitioning.remat
@@ -79,21 +81,56 @@ def shift_tokens_right(
     return shifted_input_ids
 
 
+def mult_gather(weight, hidden_states):
+    weight = jax.lax.all_gather(weight, "data", axis=0, tiled=True)
+    return weight * hidden_states
+
+
+def mult(weight, hidden_states):
+    return weight * hidden_states
+
+
 class FlaxT5LayerNorm(nn.Module):
     hidden_size: int
     dtype: jnp.dtype = jnp.float32
+    mesh: Optional[Mesh] = None
     eps: float = 1e-6
     weight_init: Callable[..., np.ndarray] = jax.nn.initializers.ones
 
     def setup(self):
+        self.names = ("embed",)
         self.weight = self.param(
             "weight",
             nn.with_logical_partitioning(
                 self.weight_init,
-                ("embed",),
+                self.names,
             ),
             (self.hidden_size,),
         )
+        param_axes = nn.logical_to_mesh_axes(self.names)
+        input_axes = nn.logical_to_mesh_axes(
+            ("batch", "length", "embed")
+        )
+        output_axes = nn.logical_to_mesh_axes(
+            ("batch", None, None)
+        )
+
+        if param_axes[0] == "data":
+            self.mult = shard_map.shard_map(
+                mult_gather,
+                in_specs=(param_axes, input_axes),
+                out_specs=output_axes,
+                mesh=self.mesh,
+                check_rep=False,
+            )
+        else:
+            self.mult = shard_map.shard_map(
+                mult,
+                in_specs=(param_axes, input_axes),
+                out_specs=output_axes,
+                mesh=self.mesh,
+                check_rep=False,
+            )
 
     def __call__(self, hidden_states):
         """
@@ -103,34 +140,37 @@ class FlaxT5LayerNorm(nn.Module):
         variance = jnp.power(hidden_states.astype("f4"), 2).mean(axis=-1, keepdims=True)
         hidden_states = hidden_states / jnp.sqrt(variance + self.eps)
 
-        return self.weight * hidden_states
+        hidden_states = nn.with_logical_constraint(
+            hidden_states, P("batch", "length", "embed")
+        )
+
+        return self.mult(self.weight, hidden_states)
 
 
 class FlaxT5DenseActDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
         wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
 
-        self.wi = nn.Dense(
+        self.wi = Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wi_init_std),
-                ("embed", "mlp"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
+            names=("embed", "mlp"),
+            mesh=self.mesh,
         )
-        self.wo = nn.Dense(
+        self.wo = Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wo_init_std),
-                ("mlp", "embed"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
             dtype=self.dtype,
+            names=("mlp", "embed"),
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
         self.act = ACT2FN[self.config.dense_act_fn]
@@ -146,37 +186,35 @@ class FlaxT5DenseActDense(nn.Module):
 class FlaxT5DenseGatedActDense(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
         wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
 
-        self.wi_0 = nn.Dense(
+        self.wi_0 = Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wi_init_std),
-                ("embed", "mlp"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
+            names=("embed", "mlp"),
+            mesh=self.mesh,
         )
-        self.wi_1 = nn.Dense(
+        self.wi_1 = Dense(
             self.config.d_ff,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wi_init_std),
-                ("embed", "mlp"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wi_init_std),
             dtype=self.dtype,
+            names=("embed", "mlp"),
+            mesh=self.mesh,
         )
-        self.wo = nn.Dense(
+        self.wo = Dense(
             self.config.d_model,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(wo_init_std),
-                ("mlp", "embed"),
-            ),
+            kernel_init=jax.nn.initializers.normal(wo_init_std),
             dtype=self.dtype,
+            names=("mlp", "embed"),
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
         self.act = ACT2FN[self.config.dense_act_fn]
@@ -193,17 +231,23 @@ class FlaxT5DenseGatedActDense(nn.Module):
 class FlaxT5LayerFF(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         if self.config.is_gated_act:
             self.DenseReluDense = FlaxT5DenseGatedActDense(
-                self.config, dtype=self.dtype
+                self.config, dtype=self.dtype, mesh=self.mesh
             )
         else:
-            self.DenseReluDense = FlaxT5DenseActDense(self.config, dtype=self.dtype)
+            self.DenseReluDense = FlaxT5DenseActDense(
+                self.config, dtype=self.dtype, mesh=self.mesh
+            )
 
         self.layer_norm = FlaxT5LayerNorm(
-            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+            self.config.d_model,
+            eps=self.config.layer_norm_epsilon,
+            dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -223,6 +267,7 @@ class FlaxT5Attention(nn.Module):
     has_relative_attention_bias: bool = False
     causal: bool = False
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
@@ -241,52 +286,47 @@ class FlaxT5Attention(nn.Module):
         kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
         o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
 
-        self.q = nn.Dense(
+        self.q = Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(q_init_std),
-                ("embed", "joined_kv"),
-            ),
+            kernel_init=jax.nn.initializers.normal(q_init_std),
             dtype=self.dtype,
+            names=("embed", "joined_kv"),
+            mesh=self.mesh,
         )
-        self.k = nn.Dense(
+        self.k = Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(kv_init_std),
-                ("embed", "joined_kv"),
-            ),
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
             dtype=self.dtype,
+            names=("embed", "joined_kv"),
+            mesh=self.mesh,
         )
-        self.v = nn.Dense(
+        self.v = Dense(
             self.inner_dim,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(kv_init_std),
-                ("embed", "joined_kv"),
-            ),
+            kernel_init=jax.nn.initializers.normal(kv_init_std),
             dtype=self.dtype,
+            names=("embed", "joined_kv"),
+            mesh=self.mesh,
         )
-        self.o = nn.Dense(
+        self.o = Dense(
             self.d_model,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(o_init_std),
-                ("joined_kv", "embed"),
-            ),
+            kernel_init=jax.nn.initializers.normal(o_init_std),
             dtype=self.dtype,
+            names=("joined_kv", "embed"),
+            mesh=self.mesh,
         )
 
         if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embed(
+            self.relative_attention_bias = Embed(
                 self.relative_attention_num_buckets,
                 self.n_heads,
-                embedding_init=nn.with_logical_partitioning(
-                    jax.nn.initializers.normal(kv_init_std),
-                    ("buckets", "heads"),
-                ),
+                embedding_init=jax.nn.initializers.normal(kv_init_std),
                 dtype=self.dtype,
+                names=("buckets", "heads"),
+                mesh=self.mesh,
             )
 
     @staticmethod
@@ -354,14 +394,14 @@ class FlaxT5Attention(nn.Module):
             hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim)
         )
         return nn.with_logical_constraint(
-            hidden_states, P("batch", "length", "heads", "embed")
+            hidden_states, P("batch", None, "heads", "embed")
         )
 
     def _merge_heads(self, hidden_states):
         hidden_states = hidden_states.reshape(
             hidden_states.shape[:2] + (self.inner_dim,)
         )
-        return nn.with_logical_constraint(hidden_states, P("batch", "length", "embed"))
+        return nn.with_logical_constraint(hidden_states, P("batch", None, "embed"))
 
     @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
@@ -515,7 +555,7 @@ class FlaxT5Attention(nn.Module):
             (
                 key_states,
                 value_states,
-                attention_attention_mask,
+                attention_mask,
             ) = self._concatenate_to_cache(
                 key_states, value_states, query_states, attention_mask
             )
@@ -581,6 +621,7 @@ class FlaxT5LayerSelfAttention(nn.Module):
     config: T5Config
     has_relative_attention_bias: bool = False
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         self.SelfAttention = FlaxT5Attention(
@@ -588,9 +629,13 @@ class FlaxT5LayerSelfAttention(nn.Module):
             has_relative_attention_bias=self.has_relative_attention_bias,
             causal=self.config.causal,
             dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.layer_norm = FlaxT5LayerNorm(
-            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+            self.config.d_model,
+            eps=self.config.layer_norm_epsilon,
+            dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -624,6 +669,7 @@ class FlaxT5LayerSelfAttention(nn.Module):
 class FlaxT5LayerCrossAttention(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         self.EncDecAttention = FlaxT5Attention(
@@ -631,9 +677,13 @@ class FlaxT5LayerCrossAttention(nn.Module):
             has_relative_attention_bias=False,
             causal=False,
             dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.layer_norm = FlaxT5LayerNorm(
-            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+            self.config.d_model,
+            eps=self.config.layer_norm_epsilon,
+            dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -667,6 +717,7 @@ class FlaxT5Block(nn.Module):
     config: T5Config
     has_relative_attention_bias: bool = False
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         self.causal = self.config.causal
@@ -676,17 +727,25 @@ class FlaxT5Block(nn.Module):
                 has_relative_attention_bias=self.has_relative_attention_bias,
                 name=str(0),
                 dtype=self.dtype,
+                mesh=self.mesh,
             ),
         )
         feed_forward_index = 1
         if self.causal:
             self.layer += (
-                FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype),
+                FlaxT5LayerCrossAttention(
+                    self.config, name=str(1), dtype=self.dtype, mesh=self.mesh
+                ),
             )
             feed_forward_index += 1
 
         self.layer += (
-            FlaxT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype),
+            FlaxT5LayerFF(
+                self.config,
+                name=str(feed_forward_index),
+                dtype=self.dtype,
+                mesh=self.mesh,
+            ),
         )
 
     def __call__(
@@ -743,6 +802,7 @@ class FlaxT5LayerCollection(nn.Module):
     config: T5Config
     has_relative_attention_bias: bool
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         if self.config.gradient_checkpointing:
@@ -751,12 +811,14 @@ class FlaxT5LayerCollection(nn.Module):
                 self.config,
                 has_relative_attention_bias=self.has_relative_attention_bias,
                 dtype=self.dtype,
+                mesh=self.mesh,
             )
         else:
             self.layer = FlaxT5Block(
                 self.config,
                 has_relative_attention_bias=self.has_relative_attention_bias,
                 dtype=self.dtype,
+                mesh=self.mesh,
             )
 
     def __call__(
@@ -788,6 +850,7 @@ class FlaxT5LayerCollection(nn.Module):
 class FlaxT5BlockCollection(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         self.causal = self.config.causal
@@ -797,6 +860,7 @@ class FlaxT5BlockCollection(nn.Module):
                 has_relative_attention_bias=(i == 0),
                 dtype=self.dtype,
                 name=str(i),
+                mesh=self.mesh,
             )
             for i in range(self.config.num_layers)
         ]
@@ -864,13 +928,19 @@ class FlaxT5Stack(nn.Module):
     config: T5Config
     embed_tokens: nn.Embed
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
         self.causal = self.config.causal
 
-        self.block = FlaxT5BlockCollection(self.config, dtype=self.dtype)
+        self.block = FlaxT5BlockCollection(
+            self.config, dtype=self.dtype, mesh=self.mesh
+        )
         self.final_layer_norm = FlaxT5LayerNorm(
-            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+            self.config.d_model,
+            eps=self.config.layer_norm_epsilon,
+            dtype=self.dtype,
+            mesh=self.mesh,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
@@ -1050,9 +1120,10 @@ class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
+        mesh: Optional[Mesh] = None,
         **kwargs
     ):
-        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        module = self.module_class(config=config, dtype=dtype, mesh=mesh, **kwargs)
         super().__init__(
             config,
             module,
@@ -1078,10 +1149,11 @@ class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(
-            rngs,
-            *args,
-        )["params"]
+        def init_fn(rngs):
+            random_params = self.module.init(rngs, *args)["params"]
+            return random_params
+
+        random_params = jax.jit(init_fn)(rngs)
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -1179,14 +1251,18 @@ class FlaxT5PreTrainedModel(LogicallyPartitionedModel):
                 **kwargs,
             )
 
-        init_variables = self.module.init(
-            jax.random.PRNGKey(0),
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            init_cache=True,
-            method=_decoder_forward,  # we only need to call the decoder to init the cache
-        )
+        def init_fn(rng):
+            return self.module.init(
+                rng,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                encoder_hidden_states=encoder_outputs[0],
+                init_cache=True,
+                method=_decoder_forward,  # we only need to call the decoder to init the cache
+            )
+
+        init_variables = jax.jit(init_fn)(jax.random.PRNGKey(0))
+
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings(T5_ENCODE_INPUTS_DOCSTRING)
@@ -1400,6 +1476,7 @@ T5_START_DOCSTRING = r"""
 class FlaxT5Module(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def _get_encoder_module(self):
         return self.encoder
@@ -1408,27 +1485,28 @@ class FlaxT5Module(nn.Module):
         return self.decoder
 
     def setup(self):
-        self.shared = nn.Embed(
+        self.shared = Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
-                ("vocab", "embed"),
+            embedding_init=jax.nn.initializers.normal(
+                self.config.initializer_factor * 1.0
             ),
             dtype=self.dtype,
+            names=("vocab", "embed"),
+            mesh=self.mesh,
         )
 
         encoder_config = copy.deepcopy(self.config)
         encoder_config.causal = False
         self.encoder = FlaxT5Stack(
-            encoder_config, embed_tokens=self.shared, dtype=self.dtype
+            encoder_config, embed_tokens=self.shared, dtype=self.dtype, mesh=self.mesh
         )
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.num_layers = self.config.num_decoder_layers
         self.decoder = FlaxT5Stack(
-            decoder_config, embed_tokens=self.shared, dtype=self.dtype
+            decoder_config, embed_tokens=self.shared, dtype=self.dtype, mesh=self.mesh
         )
 
     def __call__(
@@ -1526,16 +1604,18 @@ append_replace_return_docstrings(
 class FlaxT5EncoderModule(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def setup(self):
-        self.shared = nn.Embed(
+        self.shared = Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
-                ("vocab", "embed"),
+            embedding_init=jax.nn.initializers.normal(
+                self.config.initializer_factor * 1.0
             ),
             dtype=self.dtype,
+            names=("vocab", "embed"),
+            mesh=self.mesh,
         )
 
         encoder_config = copy.deepcopy(self.config)
@@ -1543,7 +1623,7 @@ class FlaxT5EncoderModule(nn.Module):
         encoder_config.is_encoder_decoder = False
         encoder_config.causal = False
         self.encoder = FlaxT5Stack(
-            encoder_config, embed_tokens=self.shared, dtype=self.dtype
+            encoder_config, embed_tokens=self.shared, dtype=self.dtype, mesh=self.mesh
         )
 
     def __call__(
@@ -1622,6 +1702,7 @@ class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
 class FlaxT5ForConditionalGenerationModule(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    mesh: Optional[Mesh] = None
 
     def _get_encoder_module(self):
         return self.encoder
@@ -1632,36 +1713,38 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
     def setup(self):
         self.model_dim = self.config.d_model
 
-        self.shared = nn.Embed(
+        self.shared = Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_factor),
-                ("vocab", "embed"),
-            ),
+            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor),
             dtype=self.dtype,
+            names=("vocab", "embed"),
+            mesh=self.mesh,
         )
 
         encoder_config = copy.deepcopy(self.config)
         encoder_config.causal = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = FlaxT5Stack(encoder_config, self.shared, dtype=self.dtype)
+        self.encoder = FlaxT5Stack(
+            encoder_config, self.shared, dtype=self.dtype, mesh=self.mesh
+        )
 
         decoder_config = copy.deepcopy(self.config)
         decoder_config.causal = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
-        self.decoder = FlaxT5Stack(decoder_config, self.shared, dtype=self.dtype)
+        self.decoder = FlaxT5Stack(
+            decoder_config, self.shared, dtype=self.dtype, mesh=self.mesh
+        )
 
-        self.lm_head = nn.Dense(
+        self.lm_head = Dense(
             self.config.vocab_size,
             use_bias=False,
-            kernel_init=nn.with_logical_partitioning(
-                jax.nn.initializers.normal(self.config.initializer_factor),
-                ("embed", "vocab"),
-            ),
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_factor),
             dtype=self.dtype,
+            names=("embed", "vocab"),
+            mesh=self.mesh,
         )
 
     def __call__(
